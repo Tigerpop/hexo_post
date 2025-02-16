@@ -1,7 +1,7 @@
 ---
 layout: posts
 title: 断电掉ISCS共享存储解决办法
-date: 2025-01-29 22:25:10
+date: 2025-02-15 22:25:10
 description: "这是文章开头，显示在主页面，详情请点击此处。"
 categories: 
 - "装机"
@@ -66,6 +66,10 @@ iscsiadm -m node -o delete -T iqn.2004-12.com.inspur:mcs.inspurstore.node2 -p 17
 iscsiadm -m discovery -t sendtargets -p 172.26.1.206
 iscsiadm -m discovery -t sendtargets -p 172.26.1.207
 
+# sudo iscsiadm -m discovery -t st -p <iSCSI 存储 IP 地址>
+sudo iscsiadm -m discovery -t st -p 172.26.1.206
+sudo iscsiadm -m discovery -t st -p 172.26.1.207
+sudo iscsiadm -m node --login
 ```
 
 换 iscsconfig 文件 
@@ -426,7 +430,21 @@ systemctl restart iscsid
 
 
 
+## 4、在管理平台添加
 
+ 先集群添加，
 
+![Screenshot 2025-02-16 at 11.29.03 AM](%E6%96%AD%E7%94%B5%E6%8E%89ISCS%E5%85%B1%E4%BA%AB%E5%AD%98%E5%82%A8%E8%A7%A3%E5%86%B3%E5%8A%9E%E6%B3%95/Screenshot%202025-02-16%20at%2011.29.03%E2%80%AFAM.png)
 
+再每台机器添加。
+
+![Screenshot 2025-02-16 at 11.32.42 AM](%E6%96%AD%E7%94%B5%E6%8E%89ISCS%E5%85%B1%E4%BA%AB%E5%AD%98%E5%82%A8%E8%A7%A3%E5%86%B3%E5%8A%9E%E6%B3%95/Screenshot%202025-02-16%20at%2011.32.42%E2%80%AFAM.png)
+
+![Screenshot 2025-02-16 at 11.34.09 AM](%E6%96%AD%E7%94%B5%E6%8E%89ISCS%E5%85%B1%E4%BA%AB%E5%AD%98%E5%82%A8%E8%A7%A3%E5%86%B3%E5%8A%9E%E6%B3%95/Screenshot%202025-02-16%20at%2011.34.09%E2%80%AFAM.png)
+
+IP地址可以物理机器 用 命令看见 
+
+```sh
+sudo iscsiadm -m session
+```
 

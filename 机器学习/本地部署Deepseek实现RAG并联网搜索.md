@@ -1,4 +1,41 @@
-# 系统、存储及驱动情况
+---
+layout: posts
+title: 本地部署Deepseek实现RAG并联网搜索
+date: 2025-3-21 10:08:18
+description: "这是文章开头，显示在主页面，详情请点击此处。"
+categories: 
+- "机器学习"
+tags:
+- "docker"
+- "docker compose"
+- "NVIDIA Container Toolkit"
+- "nvidia-cuda-toolkit"
+- "搜索引擎"
+- "反向代理"
+- "SearXNG"
+- "ollama"
+- "anythingllm"
+- "Nignx proxy manager"
+- "openwebUI"
+- "modelscope"
+- "vllm"
+- "容器"
+- "deepseek"
+---
+
+
+
+
+
+本地部署Deepseek有几种经典的做法，有借助ollama实现也有直接下载各种对应模型到本地用vllm调用等。我为了使用和部署方便，决定使用docker部署实现。
+
+使用多种方案部署前，需要先做好准备工作。
+
+# 一、前戏准备
+
+## 1、系统、存储及驱动情况
+
+我之前是ubuntu20.04的系统，Linux核心也是老版本的，但是Nvidia驱动和conda等环境不想变动还有很多数据不方便挪，所以选择了使用命令后台升级成了下面的版本（大约3小时），为了方便直接使用docker。以下是升级完成后我的机器情况。
 
 ```sh
 (base) cys@cysserver:~$ lsb_release -a 
@@ -43,56 +80,13 @@ Fri Feb 28 06:36:49 2025
 +-----------------------------------------------------------------------------------------+
 ```
 
-![微信图片_20250228144008](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228144008.png)
+![微信图片_20250228144008](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228144008.png)
 
 
 
-# 安装ollama
+## 2、国内安装docker
 
-```sh
-curl -fsSL https://ollama.com/install.sh | sh
-
-# 我想要指定ollama下载模型的存放位置到系统盘，因为数据盘有80T，系统只有500G。
-sudo chown -R ollama:ollama /home/cys/data/models
-
-# 修改ollama服务配置，加几个环境参数Environment，实现访问指定文件夹、外机访问.
-# 生产环境中，为了安全起见，建议将 OLLAMA_ORIGINS 设置为特定的域名或 IP 地址，以限制只有授权的来源才能访问服务.
-sudo vim /etc/systemd/system/ollama.service
---------------------------------------------------------------------------
-[Unit]
-Description=Ollama Service
-After=network-online.target
-
-[Service]
-ExecStart=/usr/local/bin/ollama serve
-User=ollama
-Group=ollama
-Restart=always
-RestartSec=3
-Environment="PATH=/home/cys/.local/bin:/home/cys/.local/bin:/home/cys/miniconda3/bin:/home/cys/miniconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin"
-Environment="OLLAMA_MODELS=/home/cys/data/models"
-Environment="OLLAMA_HOST=0.0.0.0:11434"
-Environment="OLLAMA_ORIGINS=*"
-
-[Install]
-WantedBy=default.target
---------------------------------------------------------------------------
-
-sudo systemctl daemon-reload
-sudo systemctl enable ollama
-sudo systemctl start ollama
-sudo systemctl status ollama
-
-ollama pull deepseek-r1:1.5b
-ollama list
-# 查看指定文件夹中是否有了下载的新模型
-ll /home/cys/data/models/blobs/
-
-ollama run deepseek-r1:70b
-
-```
-
-# 安装docker
+### 2.1、安装docker
 
 ```sh
 # 删除
@@ -142,88 +136,7 @@ docker pull busybox
 
 ```
 
-
-
-# 方案一：（anythingllm+searxng+Nignx proxy manager）
-
-用ollama在本地部署 deepseek-r1-70b模型，然后安装docker，在docker 中方便的下载镜像 AnythingLLM，容器化AnythingLLM实现RAG。
-
-## Docker下安装AnythingLLM
-
-```sh
-# docker pull mintplexlabs/anythingllm
-# 下面这样不好，还是要像官网一样指定容器到宿主机的映射好，这样更新了容器镜像啥的，数据可以从本地继承。
-# docker run -d -p 3001:3001 --name AnythingLLM mintplexlabs/anythingllm
-docker pull mintplexlabs/anythingllm:latest
-
-docker stop AnythingLLM && docker rm AnythingLLM  # 清理旧容器
-export STORAGE_LOCATION=/home/cys/docker_data/anythingllm  # 确保与原路径一致
-
-
-mkdir -p $STORAGE_LOCATION
-cd ${STORAGE_LOCATION}
-touch .env
-
-docker run -d -p 3001:3001 \
-  --name AnythingLLM \
-  --network host \
-  --cap-add SYS_ADMIN \
-  -v ${STORAGE_LOCATION}:/app/server/storage \
-  -v ${STORAGE_LOCATION}/.env:/app/server/.env \
-  -e STORAGE_DIR="/app/server/storage" \
-  mintplexlabs/anythingllm
-
-
-# 外部用3001端口访问docker容器内部的3001端口，# 外部用3002端口访问docker容器内部的3001端口
-# 同一个镜像做成了两个不同的容器，外部用不同的端口访问。实际部署记得分配好cpu内存等资源，怕两个容器打架抢。
-# docker run -d -p 3001:3001 --name AnythingLLM mintplexlabs/anythingllm
-# docker run -d -p 3002:3001 --name AnythingLLM2 mintplexlabs/anythingllm
-
-# 检查容器运行
-docker ps | grep AnythingLLM  # 应显示Up状态
-
-docker start AnythingLLM
-docker stop AnythingLLM
-
-# 
-```
-
-## AnythingLLM控制界面配置
-
-在外部机器，比如一台Windows机器，浏览器访问 Ubuntu机器的 IP:3001。
-
-进入一步一步设置，推荐 选团队使用，可以添加使用成员。
-
-![微信图片_20250228154513](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154513.png)
-
-![微信图片_20250228154507](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154507.png)
-
-![微信图片_20250228154516](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154516.png)
-
-![截屏2025-02-28 15.39.57](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E6%88%AA%E5%B1%8F2025-02-28%2015.39.57.jpg)
-
-点击这一个workspace中的 上传 文件可以实现 RAG。
-
-![微信图片_20250228154522](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154522.png)
-
-点击这一个workspace中的设置按钮，在聊天设置可以把 这个workspace选择 chat模式或者查询模式，查询模式优先从知识库中找内容回答，chat 则优先使用 自己训练的模型为主，但是也会参考知识库。
-
-点击下方 扳手🔧，可以进入agent代理打开联网搜索功能，但是注意有的是国内用不了的，有的要收费，推荐使用开源的本地部署的搜索引擎。
-
-![微信图片_20250228154527](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154527.png)
-
-tor浏览器的DuckDuckGo 浏览器在国内就不方便用。
-
-
-
-
-## 改良：自建搜索引擎
-
-无论是 `DuckDuckGo` 还是 `Google Search Engine`，都需要科学上网才能正常使用。
-
-所以我们就要自己搭建本地的搜索引擎。
-
-### 安装docker-compose
+### 2.2、安装docker-compose
 
 官方文档：    https://docs.docker.com/compose/install/
 
@@ -236,106 +149,132 @@ docker compose version
 docker compose -v
 ```
 
-### docker-compose 安装Nginx Proxy Manager反向代理
+### 
 
-官方文档：    https://nginxproxymanager.com/guide/ 
+## 3、Docker 调用宿主机Nvidia卡
 
-```sh
-vim docker-compose.yml
+### 3.1、安装NVIDIA Container Toolkit NVIDIA容器工具包
 
-version: '3.8'
-services:
-  app:
-    image: 'jc21/nginx-proxy-manager:latest'
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '81:81'
-      - '443:443'
-    volumes:
-      - ./data:/data
-      - ./letsencrypt:/etc/letsencrypt
-
-```
-
-> ## 
-> version: '3.8'
-> 指定了 Compose 文件的版本。这里使用的是 3.8 版，这个版本支持的一些特性和语法在 Docker Compose v2.33.0 中是兼容的。
->
-> services:
-> 定义了将要运行的容器服务。每个服务都是一个独立的容器。
->
-> app:
-> 这是服务的名字，可以随意定义。这里用 “app” 来表示运行 Nginx Proxy Manager 的容器。
->
-> image: 'jc21/nginx-proxy-manager:latest'
-> 指定了该服务使用的 Docker 镜像。
->
-> jc21/nginx-proxy-manager 是镜像名称，:latest 表示使用最新版本的镜像。Docker 会自动从仓库中拉取该镜像（如果本地不存在的话）。
-> restart: unless-stopped
-> 定义了容器的重启策略。
->
-> 当容器异常退出时会自动重启，除非用户主动停止容器。
-> ports:
-> 用于将容器内部的端口映射到主机的端口，使外部可以通过主机访问容器中的服务。
->
-> '80:80' 表示将主机的 80 端口映射到容器的 80 端口。
-> '81:81' 表示将主机的 81 端口映射到容器的 81 端口。
-> '443:443' 表示将主机的 443 端口映射到容器的 443 端口。
-> volumes:
-> 用于将主机上的目录挂载到容器中，这样可以持久化数据和配置文件。
->
-> ./data:/data 将当前目录下的 data 文件夹挂载到容器内的 /data 目录。
-> ./letsencrypt:/etc/letsencrypt 将当前目录下的 letsencrypt 文件夹挂载到容器内的 /etc/letsencrypt 目录，用于存储 SSL 证书等数据。
-
-
+参考 ：https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+https://blog.csdn.net/dw14132124/article/details/140534628
 
 ```sh
-# 按照 yml 给docker配置。
-docker compose up -d  
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
-# 独立安装则用 docker-compose up -d
+    sudo apt-get update
+
+    sudo apt-get install -y nvidia-container-toolkit
 ```
 
-### npm的Web管理控制台
-
-一旦容器启动，你可以通过浏览器访问Nginx Proxy Manager的Web界面。默认地址是`http://<your-server-ip>:81`。
+结合上面解决Docker CE的步骤，可能会导致 docker 在国内拉取不到镜像的情况，需要按照下面再搞一下。
 
 ```sh
-# 初始密码：
-Email: admin@example.com
-Password: changeme
+# 创建/编辑配置文件（注意 JSON 格式）
+sudo vim /etc/docker/daemon.json
 
-# 先做一个 DNS 解析，局域网的DNS 就在局域网访问，公网的DNS就在公网访问。下面代理中会用到DNS解析的域名Domain Names。
+# 粘贴以下内容（推荐组合多个镜像源）
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io",
+    "https://mirror.ccs.tencentyun.com",
+    "https://func.ink",
+    "https://proxy.1panel.live",
+    "https://docker.zhai.cm"
+  ]
+}
 
-# Nginx Proxy Manager 中设置您自己的域名
-# 添加一个代理 add proxy host
-# 下面的截图就是例子，以后点击 http://[域名] 就相当于 http://IP:port。  我这里咩有添加ssl，不能https访问。
+sudo systemctl daemon-reload
+sudo systemctl enable docker
+sudo systemctl restart docker
+
+cat /etc/docker/daemon.json
+# ​预期配置：包含 nvidia 运行时定义（必须字段）：
+json
+{
+  "runtimes": {
+    "nvidia": {
+      "path": "nvidia-container-runtime",
+      "runtimeArgs": []
+    }
+  }
+}
+# 若缺失，执行 sudo nvidia-ctk runtime configure --runtime=docker 自动修复
+
+
+# 检验国内是否可以正常拉取
+docker pull busybox
+docker pull nvidia/cuda:12.0.1-base-ubuntu22.04
 ```
 
-![微信图片_20250304153451](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250304153451.png)
+检查 docker 能不能正常使用 Nvidia的GPU
 
-![微信图片_20250308112806](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250308112806.png)
+```sh
+# 看看应该要不是空的。
+dpkg -l | grep nvidia-container-toolkit
 
-![微信图片_20250304153445](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250304153445.png)
+# 官方镜像标签规则为 "主版本-子版本-基础环境"
+# 拉取 CUDA 12.0.1 开发镜像
+docker pull nvidia/cuda:12.0.1-devel-ubuntu22.04
 
-可以测试一下 ，在局域网或者公网中能不能用 域名访问了。
+# 检查测试，运行一个临时容器，显示应该是和 宿主机 一模一样才OK。
+docker run --rm --gpus all nvidia/cuda:12.0.1-devel-ubuntu22.04 nvidia-smi
 
-可能需要等待一下才能生效。
+docker run --rm --gpus all nvidia/cuda:12.0.1-devel-ubuntu22.04 nvcc --version
+
+# 可以额外测试。
+#docker run --rm --gpus all nvidia/cuda:12.0.1-devel-ubuntu22.04 /bin/bash -c \
+"apt update && apt install -y cuda-samples-12-0 && \
+cd /usr/local/cuda/samples/0_Simple/vectorAdd && make && ./vectorAdd"
+# 成功标志：输出 Test PASSED
+```
+
+### 3.2、nvidia-docker 与 NVIDIA Container Toolkit 的关系
+
+nvidia-docker 与 NVIDIA Container Toolkit 的关系：
+        NVIDIA Container Toolkit 的定位NVIDIA Container Toolkit 是一套工具集合，包含 nvidia-container-runtime、libnvidia-container 等组件，用于实现容器与 GPU 的深度集成。它取代了旧版 nvidia-docker 的核心功能。
+是否需要单独安装 nvidia-docker？
+		Docker ≥19.03 版本：无需安装 nvidia-docker。直接通过 Docker 的 --gpus 参数即可调用 GPU（例如 docker run --gpus all ...），底层由 NVIDIA Container Toolkit 提供支持。旧版 Docker：需安装 nvidia-docker2 包作为插件，以兼容 GPU 调用。
+
+### 3.3、宿主机安装nvidia-cuda-toolkit
+
+```sh
+# nvcc --version 如果没有就如下安装。
+# sudo apt update 
+# sudo apt install nvidia-cuda-toolkit
+vim hello.cu
+# _____________________________ hello.cu ____________________________________
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+__global__ void hello() {
+    printf("Hello from GPU!\n");
+}
+
+int main() {
+    hello<<<1,1>>>();
+    cudaDeviceSynchronize();
+    return 0;
+}
+# _____________________________ hello.cu ____________________________________
+nvcc --version #  release 12.0, V12.0.140  Build cuda_12.0.r12.0/compiler.32267302_0
+nvcc -o hello hello.cu -arch=sm_86 && ./hello 
+# 输出 Hello from GPU! 算成功。
+```
+
+### 
 
 
 
-> 补充：免费域名注册 和 Cloudflare 域名解析
->
-> 参考： https://blog.csdn.net/u010522887/article/details/140786338
->              https://www.freedidi.com/17434.html
-> 如果已经有了本地的 DNS 解析 也就不用了，局域网的DNS解析局域网用，公网的DNS解析公网用。
+# 二、自建搜索引擎
 
- 
+无论是 `DuckDuckGo` 还是 `Google Search Engine`，都需要科学上网才能正常使用。
 
-# SearXNG 搜索引擎本地部署（二选一）
+所以我们就要自己搭建本地的搜索引擎。
 
-## 一、Docker compose版本（可浏览器使用，不可被AnythingLLM调用）
+## 1、SearXNG 搜索引擎本地部署（二选一）
+
+### 1.1、Docker compose版本（可浏览器使用，不可被AnythingLLM/open webUI调用）
 
 我们还是用docker版本的，方便： 
 
@@ -369,7 +308,7 @@ docker compose down
 docker compose up -d
 ```
 
-#### yaml：
+#### 1.1.1、yaml：
 
 `searxng/searxng-docker# cat docker-compose.yaml `
 
@@ -455,7 +394,7 @@ volumes:
   valkey-data2:
 ```
 
-#### yaml解释：
+#### 1.1.2、yaml解释：
 
 ```yaml
 ports:
@@ -503,7 +442,7 @@ environment:
 
 这里的 10.199.1.233  就是你服务器在局域网内的 IP 地址。
 
-#### 修改setting.yml配置
+#### 1.1.3、修改setting.yml配置
 
 找自己要添加的内容复制下来，黏贴进默认的setting.yml中就行了，这样好像不行。
 选中国大陆能用的engine。
@@ -548,17 +487,17 @@ search:
 
 
 
-#### 登录searxng页面改搜索引擎：
+#### 1.1.4、登录searxng页面改搜索引擎：
 
 因为大陆不方便用很多引擎，你懂的。所以我们用 中国大陆可以用的 bing 这些。
 
-先登录 http://IP:8080  在右上角配置。![配置](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E9%85%8D%E7%BD%AE.png)
+先登录 http://IP:8080  在右上角配置。![配置](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E9%85%8D%E7%BD%AE.png)
 
-![示例](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E7%A4%BA%E4%BE%8B.png)
+![示例](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E7%A4%BA%E4%BE%8B.png)
 
 
 
-## 二、Docker 版本（不可被AnythingLLM调用）
+### 1.2、Docker 版本（不可被AnythingLLM/open webUI调用）
 
 参考： 
 https://docs.searxng.org/admin/installation-docker.html#installation-docker
@@ -599,7 +538,239 @@ $ docker container rm 2f998
 
 
 
-# 方案二：（open web UI+searxng+Nignx proxy manager）
+# 三、反向代理
+
+## 1、安装Nginx Proxy Manager
+
+官方文档：    https://nginxproxymanager.com/guide/ 
+
+```sh
+vim docker-compose.yml
+
+version: '3.8'
+services:
+  app:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+
+```
+
+> ## 
+> version: '3.8'
+> 指定了 Compose 文件的版本。这里使用的是 3.8 版，这个版本支持的一些特性和语法在 Docker Compose v2.33.0 中是兼容的。
+>
+> services:
+> 定义了将要运行的容器服务。每个服务都是一个独立的容器。
+>
+> app:
+> 这是服务的名字，可以随意定义。这里用 “app” 来表示运行 Nginx Proxy Manager 的容器。
+>
+> image: 'jc21/nginx-proxy-manager:latest'
+> 指定了该服务使用的 Docker 镜像。
+>
+> jc21/nginx-proxy-manager 是镜像名称，:latest 表示使用最新版本的镜像。Docker 会自动从仓库中拉取该镜像（如果本地不存在的话）。
+> restart: unless-stopped
+> 定义了容器的重启策略。
+>
+> 当容器异常退出时会自动重启，除非用户主动停止容器。
+> ports:
+> 用于将容器内部的端口映射到主机的端口，使外部可以通过主机访问容器中的服务。
+>
+> '80:80' 表示将主机的 80 端口映射到容器的 80 端口。
+> '81:81' 表示将主机的 81 端口映射到容器的 81 端口。
+> '443:443' 表示将主机的 443 端口映射到容器的 443 端口。
+> volumes:
+> 用于将主机上的目录挂载到容器中，这样可以持久化数据和配置文件。
+>
+> ./data:/data 将当前目录下的 data 文件夹挂载到容器内的 /data 目录。
+> ./letsencrypt:/etc/letsencrypt 将当前目录下的 letsencrypt 文件夹挂载到容器内的 /etc/letsencrypt 目录，用于存储 SSL 证书等数据。
+
+
+
+```sh
+# 按照 yml 给docker配置。
+docker compose up -d  
+
+# 独立安装则用 docker-compose up -d
+```
+
+## 2、npm的Web管理控制台
+
+一旦容器启动，你可以通过浏览器访问Nginx Proxy Manager的Web界面。默认地址是`http://<your-server-ip>:81`。
+
+```sh
+# 初始密码：
+Email: admin@example.com
+Password: changeme
+
+# 先做一个 DNS 解析，局域网的DNS 就在局域网访问，公网的DNS就在公网访问。下面代理中会用到DNS解析的域名Domain Names。
+
+# Nginx Proxy Manager 中设置您自己的域名
+# 添加一个代理 add proxy host
+# 下面的截图就是例子，以后点击 http://[域名] 就相当于 http://IP:port。  我这里咩有添加ssl，不能https访问。
+```
+
+![微信图片_20250304153451](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250304153451.png)
+
+![微信图片_20250308112806](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250308112806.png)
+
+![微信图片_20250304153445](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250304153445.png)
+
+可以测试一下 ，在局域网或者公网中能不能用 域名访问了。
+
+可能需要等待一下才能生效。
+
+
+
+> 补充：免费域名注册 和 Cloudflare 域名解析
+>
+> 参考： https://blog.csdn.net/u010522887/article/details/140786338
+>           https://www.freedidi.com/17434.html
+> 如果已经有了本地的 DNS 解析 也就不用了，局域网的DNS解析局域网用，公网的DNS解析公网用。
+
+ 
+
+# 
+
+
+
+
+
+
+
+
+
+
+
+# 四、思路一：Ollama部署Deepseek
+
+## 1、安装ollama
+
+```sh
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 我想要指定ollama下载模型的存放位置到系统盘，因为数据盘有80T，系统只有500G。
+sudo chown -R ollama:ollama /home/cys/data/models
+
+# 修改ollama服务配置，加几个环境参数Environment，实现访问指定文件夹、外机访问.
+# 生产环境中，为了安全起见，建议将 OLLAMA_ORIGINS 设置为特定的域名或 IP 地址，以限制只有授权的来源才能访问服务.
+sudo vim /etc/systemd/system/ollama.service
+--------------------------------------------------------------------------
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="PATH=/home/cys/.local/bin:/home/cys/.local/bin:/home/cys/miniconda3/bin:/home/cys/miniconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin"
+Environment="OLLAMA_MODELS=/home/cys/data/models"
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="OLLAMA_ORIGINS=*"
+
+[Install]
+WantedBy=default.target
+--------------------------------------------------------------------------
+
+sudo systemctl daemon-reload
+sudo systemctl enable ollama
+sudo systemctl start ollama
+sudo systemctl status ollama
+
+ollama pull deepseek-r1:1.5b
+ollama list
+# 查看指定文件夹中是否有了下载的新模型
+ll /home/cys/data/models/blobs/
+
+ollama run deepseek-r1:70b
+
+```
+
+
+
+## 2.1、方案一：（ollama+anythingllm+searxng+Nignx proxy manager）
+
+用ollama在本地部署 deepseek-r1-70b模型，然后安装docker，在docker 中方便的下载镜像 AnythingLLM，容器化AnythingLLM实现RAG。
+
+### 2.1.1、Docker下安装AnythingLLM
+
+```sh
+# docker pull mintplexlabs/anythingllm
+# 下面这样不好，还是要像官网一样指定容器到宿主机的映射好，这样更新了容器镜像啥的，数据可以从本地继承。
+# docker run -d -p 3001:3001 --name AnythingLLM mintplexlabs/anythingllm
+docker pull mintplexlabs/anythingllm:latest
+
+docker stop AnythingLLM && docker rm AnythingLLM  # 清理旧容器
+export STORAGE_LOCATION=/home/cys/docker_data/anythingllm  # 确保与原路径一致
+
+
+mkdir -p $STORAGE_LOCATION
+cd ${STORAGE_LOCATION}
+touch .env
+
+docker run -d -p 3001:3001 \
+  --name AnythingLLM \
+  --network host \
+  --cap-add SYS_ADMIN \
+  -v ${STORAGE_LOCATION}:/app/server/storage \
+  -v ${STORAGE_LOCATION}/.env:/app/server/.env \
+  -e STORAGE_DIR="/app/server/storage" \
+  mintplexlabs/anythingllm
+
+
+# 外部用3001端口访问docker容器内部的3001端口，# 外部用3002端口访问docker容器内部的3001端口
+# 同一个镜像做成了两个不同的容器，外部用不同的端口访问。实际部署记得分配好cpu内存等资源，怕两个容器打架抢。
+# docker run -d -p 3001:3001 --name AnythingLLM mintplexlabs/anythingllm
+# docker run -d -p 3002:3001 --name AnythingLLM2 mintplexlabs/anythingllm
+
+# 检查容器运行
+docker ps | grep AnythingLLM  # 应显示Up状态
+
+docker start AnythingLLM
+docker stop AnythingLLM
+
+# 
+```
+
+### 2.1.2、AnythingLLM控制界面配置
+
+在外部机器，比如一台Windows机器，浏览器访问 Ubuntu机器的 IP:3001。
+
+进入一步一步设置，推荐 选团队使用，可以添加使用成员。
+
+![微信图片_20250228154513](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154513.png)
+
+![微信图片_20250228154507](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154507.png)
+
+![微信图片_20250228154516](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154516.png)
+
+![截屏2025-02-28 15.39.57](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-02-28%2015.39.57.jpg)
+
+点击这一个workspace中的 上传 文件可以实现 RAG。
+
+![微信图片_20250228154522](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154522.png)
+
+点击这一个workspace中的设置按钮，在聊天设置可以把 这个workspace选择 chat模式或者查询模式，查询模式优先从知识库中找内容回答，chat 则优先使用 自己训练的模型为主，但是也会参考知识库。
+
+点击下方 扳手🔧，可以进入agent代理打开联网搜索功能，但是注意有的是国内用不了的，有的要收费，推荐使用开源的本地部署的搜索引擎。
+
+![微信图片_20250228154527](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250228154527.png)
+
+tor浏览器的DuckDuckGo 浏览器在国内就不方便用。
+
+
+
+## 2.1、方案二：（ollama+open web UI+searxng+Nignx proxy manager）
 
 前提也是在安装好ollama 的基础上进行的。
 参考：
@@ -637,7 +808,7 @@ docker compose logs -f --tail=100
 ```
 
 docker-compose.yml截图
-![截屏2025-03-09 17.43.47](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E6%88%AA%E5%B1%8F2025-03-09%2017.43.47.jpg)
+![截屏2025-03-09 17.43.47](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-09%2017.43.47.jpg)
 
 ```yaml
 name: <your project name>
@@ -666,23 +837,19 @@ volumes:
         name: open-webui
 ```
 
-![微信图片_20250309131910](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250309131910.png)
+![微信图片_20250309131910](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250309131910.png)
 
-![微信图片_20250309131717](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250309131717.png)
+![微信图片_20250309131717](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250309131717.png)
 
- ![dl](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/dl.png)
+ ![dl](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/dl.png)
 
-
-
-# 一套联网搜索部署方法实例
+### 2.1.1、联网搜索部署成功案例
 
 参考：
 
 ​       https://mp.weixin.qq.com/s/Fgwn9DYit65sw7ql1S3Pfw
 
-## 成功案例
-
-### 一、配置searxng
+#### 2.1.1.1、配置searxng
 
 ```sh
 mkdir -p /home/cys/docker_data/searxng/searxng
@@ -839,7 +1006,7 @@ sudo docker compose up
 
 浏览器中访问 http://10.5.9.252 的8081端口即可访问网页版本的searxng。
 
-### 二、安装配置 open webUI
+#### 2.1.1.2、安装配置 open webUI
 
 ```sh
 # 拉取嵌入模型
@@ -890,13 +1057,13 @@ sudo docker compose up -d
 sudo docker compose up 
 ```
 
-### 三、网页中配置
+#### 2.1.1.3、网页中配置
 
-![微信图片_20250311095926](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095926.png)
+![微信图片_20250311095926](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095926.png)
 
-![微信图片_20250311095931](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095931.png)
+![微信图片_20250311095931](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095931.png)
 
-![微信图片_20250311095937](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095937.png)
+![微信图片_20250311095937](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095937.png)
 
 在配置【Searxng 查询 URL】
 
@@ -908,21 +1075,21 @@ http://10.5.9.252:8081/search?time_range=&categories=general&language=auto&local
 >
 > > https://github.com/open-webui/open-webui/blob/main/backend/open_webui/retrieval/web/searxng.py
 
-![微信图片_20250311095941](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095941.png)
+![微信图片_20250311095941](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095941.png)
 
 效果图如下：
 
-![微信图片_20250311095945](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095945-1658497.png)
+![微信图片_20250311095945](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095945-1658497.png)
 
-![微信图片_20250311095807](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095807.png)
+![微信图片_20250311095807](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250311095807.png)
 
 效果并不好，经常会出现搜不到的情况。
 
 
 
+### 2.1.2、补充说明部分
 
-
-## 本地数据映射、迁移
+#### 2.1.2.1、本地数据映射、迁移
 
 ```yaml
 services:
@@ -980,7 +1147,7 @@ volumes:
 
 把原来的 文件夹 cp 过去，然后 在改yaml 文件，重新 docker compose up -d ，可以迁移了，如果还是不成功，可以在docker logs 【容器名/id】 看看日志提示。
 
-## 日志
+#### 2.1.2.2、日志
 
 日志文件默认存储在宿主机的 `/var/lib/docker/containers/<container-id>/` 目录中。
 日志文件由 Docker 引擎管理，**与容器共存亡**。当容器被删除（如执行 `docker compose down`）后，其日志文件也会被清理。
@@ -1004,34 +1171,216 @@ services:
 
 
 
-## 改换嵌入模型
+#### 2.1.2.3、改换嵌入模型
+
+先下载好嵌入模型然后修改 docker的 yml文件，web界面中管理员面板；设置；文档中自己修改。
+
+
+
+#### 2.1.2.4、RAG
+
+点击工作空间；点击“知识库”选项；传好文件；再点击模型；在编辑中选择关联上哪些知识库即可。
+
+
+
+#### 2.1.2.5、自建searxng搜索引擎插件实现微信搜索
+
+要读源码自己仿写，暂时没写，难度不大。
+
+
+#### 2.1.2.6、让用户能够自己注册
+
+![微信图片_20250314105527](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250314105527.png)
+
+![微信图片_20250314105533](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250314105533.png)
+
+# 
 
 
 
 
-## 加反向代理
+
+# 四、思路二：vllm部署Deepseek
+
+## 1、方案：（vllm+open web UI+searxng+Nignx proxy manager）
+
+### 1.1、modelscope本地下载大模型
+
+国内用modelscope本地下载大模型，为vllm调用作铺垫。
+
+https://www.modelscope.cn/models/
+**注意**：如果多GPU需下载 **DeepSeek-R1-70B-AWQ** 分片版模型（支持张量并行），以下只是演示没有选AWQ版本。
+假如下载的模型是不带AWQ的，即便是你在 yml 文件中写的 使用多卡GPU，也会实际用一个GPU的显存，极有可能出现暴显存的情况。![截屏2025-03-20 09.33.12](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-20%2009.33.12.jpg)![截屏2025-03-20 09.32.32](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-20%2009.32.32.jpg)
+
+![截屏2025-03-18 20.42.40](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-18%2020.42.40.jpg)
+
+![截屏2025-03-18 21.05.23](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-18%2021.05.23.jpg)
+
+![截屏2025-03-18 21.07.18](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-18%2021.07.18.jpg)
+
+推荐使用modelscope 下载到指定位置。
+
+![微信图片_20250318211815](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250318211815.png)
 
 
 
-## RAG
+### 1.2、vllm部署
+
+#### 1.2.1、vllm单机多卡部署
+
+```sh
+mkdir -p /home/cys/docker_data/vLLM
+cd /home/cys/docker_data/vLLM
+
+# nvcc --version 如果没有就如下安装。
+# sudo apt update 
+# sudo apt install nvidia-cuda-toolkit
+vim hello.cu
+# _____________________________ hello.cu ____________________________________
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+__global__ void hello() {
+    printf("Hello from GPU!\n");
+}
+
+int main() {
+    hello<<<1,1>>>();
+    cudaDeviceSynchronize();
+    return 0;
+}
+# _____________________________ hello.cu ____________________________________
+nvcc --version #  release 12.0, V12.0.140  Build cuda_12.0.r12.0/compiler.32267302_0
+nvcc -o hello hello.cu -arch=sm_86 && ./hello 
+# 输出 Hello from GPU! 算成功。
+
+# 创建一个外部网络
+docker network create vllm-network
+
+vim docker-compose.yml
+# _____________________________ docker-compose.yml ____________________________________
+services:
+  vllm-openai:
+    runtime: nvidia
+    restart: unless-stopped
+    container_name: deepseek-container
+    ipc: host  # 使用主机 IPC 命名空间
+    image: vllm/vllm-openai:latest
+    volumes:
+      - /home/cys/data/models/deepseek-r1-70b-AWQ:/models/deepseek-r1-70b:ro
+    command:
+      - "--model=/models/deepseek-r1-70b"
+      - "--tensor_parallel_size=2"
+      - "--pipeline_parallel_size=1"
+      - "--gpu_memory_utilization=0.95"  # 调高利用率以增加 KV Cache 内存
+      - "--max_model_len=8192"         # 根据需要调整最大序列长度
+      - "--served-model-name=deepseek-r1-70b-AWQ"
+      - "--dtype=half"
+      - "--api-key=jisudf*&QW123"
+      - "--swap_space=8"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0,1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - NCCL_DEBUG=INFO
+    ports:
+      - "8000:8000"
+    deploy:  # 非 docker Swarm 内置集群 模式下，deploy 部分的配置通常不会被应用
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2
+              capabilities: [gpu]
+    networks:
+      - my-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+networks:
+  my-network:
+    external: true
+    name: vllm-network
+# _____________________________ docker-compose.yml ____________________________________
+
+docker compose up -d 
+docker logs deepseek-container # 检查容器日志，还可以检查一下。nvidia-smi
+```
+
+![微信图片_20250320144426](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250320144426.png)
+
+显卡跑起来了，看见 显存被搞起来了，说明调用成功。
+
+#### 1.2.2、vllm多机多卡部署
 
 
 
-## 自建searxng搜索引擎插件实现微信搜索
-
-
-
-## 让用户能够自己注册
-
-![微信图片_20250314105527](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250314105527.png)
-
-![微信图片_20250314105533](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250314105533.png)
 
 
 
 
+### 1.3、open webUI调用vllm
 
-# 补充：
+```sh
+mkdir -p /home/cys/docker_data/openwebui2
+cd /home/cys/docker_data/openwebui2
+
+vim docker-compose.yml 
+# _____________________________ docker-compose.yml ____________________________________
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:cuda
+    environment:
+      # 禁用 ollama 连接（注释或删除该行）
+      # - OLLAMA_API_BASE_URL=http://10.5.9.252:11434
+      
+      # 启用 OpenAI 兼容 API（必须开启）
+      - ENABLE_OPENAI_API=true
+      
+      # 指向本地 vLLM 的 OpenAI 兼容接口,即使你设置 container_name 为 deepseek-container，Docker内部仍然会将这个容器注册为服务名 vllm-openai，所以其他同网络的容器可以通过 “vllm-openai” 访问它
+      - OPENAI_API_BASE_URL=http://vllm-openai:8000/v1
+      
+      # 设置与 vLLM 一致的 API 密钥
+      - OPENAI_API_KEYS=jisudf*&QW123
+      
+      # 其他原有配置保持不变
+      - GLOBAL_LOG_LEVEL=DEBUG
+      - HF_ENDPOINT=https://hf-mirror.com
+      - CORS_ALLOW_ORIGIN=*
+      - RAG_EMBEDDING_MODEL=bge-m3
+      - DEFAULT_MODELS=deepseek-r1-70b-AWQ  # 需与 vLLM 的 --served-model-name 参数一致
+      - ENABLE_OAUTH_SIGNUP=true
+    ports:
+      - 8080:8080
+    volumes:
+      - /home/cys/data/docker-data/open_webui_data:/app/backend/data
+    networks:
+      - my-network
+networks:
+  my-network:
+    external: true
+    name: vllm-network
+# _____________________________ docker-compose.yml ____________________________________
+
+docker compose up -d 
+
+```
+
+再在web页面配置一下连接上 vllm 。
+![微信图片_20250320155359](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250320155359.png)
+
+![微信图片_20250320155402](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250320155402.png)
+
+
+
+
+
+
+
+
+
+# 附加：可能遇到的若干问题：
 
 ```sh
 # 通过 docker compose down 命令停止当前运行的所有容器，同时清理网络和容器资源（默认保留数据卷）
@@ -1057,7 +1406,7 @@ docker compose up -d --no-deps <服务名>
 docker compose ps
 ```
 
-#### AnythingLLM数据迁移
+#### · AnythingLLM数据迁移
 
 如果是 之前 拉取anythingllm 没有做本地的映射，在更新anythingllm 的时候，一定要做好 数据的转移。
 
@@ -1107,7 +1456,7 @@ docker run -d -p 3001:3001 \
 
 ```
 
-#### 测试容器之间是否相通
+#### · 测试容器之间是否相通
 
 ```sh
 docker exec -it AnythingLLM /bin/bash
@@ -1118,7 +1467,7 @@ curl "http://宿主机IP:端口/search?q=测试&format=json"
 
 ```
 
-#### 遇到 **阿里云 Docker CE 镜像源** 和 **GPG 密钥过时** 
+#### · 遇到 **阿里云 Docker CE 镜像源** 和 **GPG 密钥过时** 
 
 ```sh
 sudo apt-get update 
@@ -1189,83 +1538,9 @@ apt-cache policy docker-ce
 
 ```
 
-#### 安装NVIDIA Container Toolkit NVIDIA容器工具包（docker 方便用Nvidia卡）
-
-参考 ：https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
-https://blog.csdn.net/dw14132124/article/details/140534628
-
-```sh
-    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-    sudo apt-get update
-
-    sudo apt-get install -y nvidia-container-toolkit
-```
-
-结合上面解决Docker CE的步骤，可能会导致 docker 在国内拉取不到镜像的情况，需要按照下面再搞一下。
-
-```sh
-# 创建/编辑配置文件（注意 JSON 格式）
-sudo vim /etc/docker/daemon.json
-
-# 粘贴以下内容（推荐组合多个镜像源）
-{
-  "registry-mirrors": [
-    "https://docker.m.daocloud.io",
-    "https://mirror.ccs.tencentyun.com",
-    "https://func.ink",
-    "https://proxy.1panel.live",
-    "https://docker.zhai.cm"
-  ]
-}
-
-sudo systemctl daemon-reload
-sudo systemctl enable docker
-sudo systemctl restart docker
-
-cat /etc/docker/daemon.json
-# ​预期配置：包含 nvidia 运行时定义（必须字段）：
-json
-{
-  "runtimes": {
-    "nvidia": {
-      "path": "nvidia-container-runtime",
-      "runtimeArgs": []
-    }
-  }
-}
-# 若缺失，执行 sudo nvidia-ctk runtime configure --runtime=docker 自动修复
 
 
-# 检验国内是否可以正常拉取
-docker pull busybox
-docker pull nvidia/cuda:12.0.1-base-ubuntu22.04
-```
-
-检查 docker 能不能正常使用 Nvidia的GPU
-
-```sh
-# 看看应该要不是空的。
-dpkg -l | grep nvidia-container-toolkit
-
-# 官方镜像标签规则为 "主版本-子版本-基础环境"
-# 拉取 CUDA 12.0.1 开发镜像
-docker pull nvidia/cuda:12.0.1-devel-ubuntu22.04
-
-# 运行一个临时容器，显示应该是和 宿主机 一模一样才OK。
-docker run --rm --gpus all nvidia/cuda:12.0.1-devel-ubuntu22.04 nvidia-smi
-
-docker run --rm --gpus all nvidia/cuda:12.0.1-devel-ubuntu22.04 nvcc --version
-
-# 可以额外测试。
-#docker run --rm --gpus all nvidia/cuda:12.0.1-devel-ubuntu22.04 /bin/bash -c \
-"apt update && apt install -y cuda-samples-12-0 && \
-cd /usr/local/cuda/samples/0_Simple/vectorAdd && make && ./vectorAdd"
-# 成功标志：输出 Test PASSED
-```
-
-#### open webui 白屏问题解决
+#### · open webui 白屏问题解决
 
 参考：https://blog.csdn.net/xianciSele/article/details/145340554
 
@@ -1273,7 +1548,7 @@ https://blog.kazoottt.top/posts/openwebui-long-loading-white-screen-solution/
 
 https://github.com/open-webui/open-webui/discussions/7769
 
-![微信图片_20250310084150](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%B9%B6%E4%BD%BF%E7%94%A8AnythingLLM%E5%AE%9E%E7%8E%B0RAG/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250310084150.png)
+![微信图片_20250310084150](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250310084150.png)
 
 ```sh
 # 从网页访问 3000端口 网页白板，要等2分钟，其实是因为 访问 openip 获取模型失败，网不通。
@@ -1318,7 +1593,55 @@ volumes:
         name: open-webui
 ```
 
-#### searxng中长句子不能搜索的问题
+以上的例子都是在ollama下载的deepseek的处理办法，在vllm 直接下载 deepseek模型到本地的方法中一定要打开openaai 的支持，只不过在具体的url 要指定要本地就好了。可以看看前面vllm的部署例子。
+
+
+#### · searxng中长句子不能搜索的问题
 
 开启 多个国内能用的搜索引擎，而不是只开一个bing。可以解决。bing 搜索引擎好像不支持长句的搜索。
+
+
+
+#### · 容器间通信问题的最佳实践
+
+```sh
+# 创建一个外部网络
+docker network create vllm-network
+```
+
+在每个 docker-compose 文件中引用这个网络。例如，在 vllm 的 docker-compose.yml 文件中添加：
+
+external: true 表示使用已存在的外部网络，而不是由当前的 Compose 文件创建新的网络。
+
+```yaml
+networks:
+  my-network:
+    external: true 
+    name: my-shared-network
+```
+
+然后在对应的服务配置中加入：
+
+```yaml
+services:
+  open-webui:
+    # ...现有配置...
+    networks:
+      - my-network
+```
+
+**修改 open-webui 的 API 地址**：
+将 `OPENAI_API_BASE_URL` 设置为 `http://vllm-openai:8000/v1`。这样 open-webui 容器会通过 DNS 查找同一网络中的 vllm-openai 服务。
+
+> 这种方法比较稳定，服务间互访不依赖宿主机 IP。
+> 在 Docker Compose 中，服务名称（在 yml 文件中 services 下的键名）就是容器在同一网络中的 DNS 名称。也就是说，即使你设置了 container_name 为 deepseek-container，Docker 内部仍然会将这个容器注册为服务名 **vllm-openai**，所以其他同网络的容器可以通过 “vllm-openai” 来访问它。
+
+将多个容器加入同一个自定义网络后：
+
+1. **容器与宿主机之间的端口映射：** 自定义网络不会影响容器与宿主机之间的端口映射。端口映射是在容器启动时通过 `-p` 参数或在 Compose 文件中通过 `ports` 指定的，用于将宿主机的特定端口转发到容器的端口。这些映射在自定义网络中仍然有效。
+2. **容器连接互联网：** 默认情况下，Docker 使用 `bridge` 网络驱动程序创建的自定义网络允许容器访问外部互联网。因此，容器加入自定义网络后，通常仍能连接互联网。但如果使用其他网络驱动程序（如 `macvlan`），可能需要额外配置以确保互联网连接。
+
+
+
+
 

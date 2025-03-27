@@ -21,6 +21,8 @@ tags:
 - "vllm"
 - "容器"
 - "deepseek"
+- "集群"
+- "swarm"
 ---
 
 
@@ -100,6 +102,10 @@ curl -fsSL https://get.docker.com | sudo sh
     # 或者
     sudo apt-get update
     sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+    # 或者
+    sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/docker.list
+    sudo apt update
+    sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin
 
 # 配置Docker环境
     # 添加用户到docker组
@@ -632,10 +638,10 @@ Password: changeme
 > 补充：免费域名注册 和 Cloudflare 域名解析
 >
 > 参考： https://blog.csdn.net/u010522887/article/details/140786338
->        https://www.freedidi.com/17434.html
+>           https://www.freedidi.com/17434.html
 > 如果已经有了本地的 DNS 解析 也就不用了，局域网的DNS解析局域网用，公网的DNS解析公网用。
->
-> 
+
+ 
 
 
 
@@ -1303,6 +1309,134 @@ docker logs deepseek-container # 检查容器日志，还可以检查一下。nv
 显卡跑起来了，看见 显存被搞起来了，说明调用成功。
 
 #### 1.2.2、vllm多机多卡部署
+
+参考：
+
+https://docs.vllm.ai/en/latest/serving/distributed_serving.html
+
+https://mp.weixin.qq.com/s/tdubYmXNt98ZN6SB7iMIrw
+
+
+先在另一台机器中安装好和第一台机器一样的 环境（推荐docker 搞），当从节点。
+
+从第一台机器（主节点）中把模型复制过来。
+
+下载一个vllm 官方的脚本（cluster启动脚本）。
+
+```sh
+wget https://github.com/vllm-project/vllm/blob/main/examples/online_serving/run_cluster.sh
+```
+
+##### 1.2.2.1、Docker Swarm 基础
+
+参考：https://www.bilibili.com/video/BV1ZM4m1Z75k/?spm_id_from=333.337.search-card.all.click&vd_source=a07523372ea1438247b770c295f20822
+
+docker swarm 和 docker compose一样都是为了简化 容器化程序的部署、管理和扩展的工具。
+
+docker compose 单机上用而已。
+
+docker swarm 集群用。
+
+![截屏2025-03-27 08.58.17](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2008.58.17.png)
+
+![截屏2025-03-27 09.02.04](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.02.04.png)
+
+下面的例子 是 两个 manager 节点 两个 worker 节点 组成的4个 node 的 swarm集群例子。
+
+![截屏2025-03-27 09.40.40](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.40.40.png)
+
+###### · 初始化集群：![截屏2025-03-27 09.07.42](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.07.42.png)
+
+###### · 加入节点：
+
+![截屏2025-03-27 09.08.23](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.08.23.png)
+
+docker node ls 查看 有哪些节点。
+
+###### · 集群解散：
+
+![截屏2025-03-27 09.11.50](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.11.50.png)
+
+
+
+###### · 节点管理：
+
+![截屏2025-03-27 09.15.37](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.15.37.png)
+
+###### · 服务管理：
+
+![截屏2025-03-27 09.20.15](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.20.15.png)
+
+![截屏2025-03-27 09.22.01](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.22.01.png)
+
+> replicas 是 2 说明 搞了两个副本容器在集群中，但是具体分配给了哪两个节点 由调度策略来决定，注意一共就是 两个容器 ，副本的意思不是 说再复制出2个一共3个，别误会了。
+>
+> source 是 宿主机的映射目录，target是 容器内部的 目录，用bing直接映射挂载。
+
+![截屏2025-03-27 09.35.18](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.35.18.png)
+
+> docker service ls 看见 属性中的 replicas 2/2 3/3 1/1 5/5 前后数字一致 说明有2个replicas副本，有2个成功运行，以此类推。前后不一致说明没有正常运行。
+
+>  服务定义好以后，是在集群中的全部 node 都能访问的，但是容器并不是在每一个节点中运行，仅仅是在调度分配的节点中运行。
+
+###### · swarm集群弹性伸缩：
+
+![截屏2025-03-27 09.53.01](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.53.01.png)
+
+###### · swarm集群服务滚动更新：
+
+![截屏2025-03-27 09.56.58](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2009.56.58.png)
+
+```sh
+docker service update --replicas=5
+--image mysql:8.0
+--update-delay 60s
+--update-parallelism 5
+mydb
+```
+
+![截屏2025-03-27 10.04.10](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2010.04.10.png)
+
+60秒后 4个node 中出现了5个更新到 mysql8.0的服务容器。
+
+![截屏2025-03-27 10.05.33](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2010.05.33.png)
+
+###### · swarm集群中使用docker compose：
+
+![截屏2025-03-27 10.45.28](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2010.45.28.png)
+
+![截屏2025-03-27 10.46.19](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2010.46.19.png)
+
+> 可以把 这么多个副本全部落到指定的node 节点中。
+>
+> docker compose up 是单机启动方式，会忽略 deploy 内容。
+
+![截屏2025-03-27 10.53.38](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2010.53.38.png)
+
+```sh
+docker stack deploy -c yml文件名 自定义stack名
+```
+
+docker swarm 中不支持 name 属性的定义
+![截屏2025-03-27 13.55.39](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-27%2013.55.39.png)
+
+docker swarm 和 k8s 是竞争关系，但是 docker swarm 没有竞争过k8s，但是docker swarm依然有它的意义。
+
+
+
+##### 1.2.2.2、具体部署
+
+在 Docker Swarm 的集群架构中，**所有 YAML 文件都需要在主节点上运行**。
+
+###### · docker swarm GPU支持
+
+参考  https://gist.github.com/coltonbh/374c415517dbeb4a6aa92f462b9eb287
+
+
+
+
+
+
 
 
 

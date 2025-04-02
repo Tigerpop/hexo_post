@@ -572,7 +572,6 @@ services:
 
 ```
 
-> ## 
 > version: '3.8'
 > 指定了 Compose 文件的版本。这里使用的是 3.8 版，这个版本支持的一些特性和语法在 Docker Compose v2.33.0 中是兼容的。
 >
@@ -601,8 +600,6 @@ services:
 >
 > ./data:/data 将当前目录下的 data 文件夹挂载到容器内的 /data 目录。
 > ./letsencrypt:/etc/letsencrypt 将当前目录下的 letsencrypt 文件夹挂载到容器内的 /etc/letsencrypt 目录，用于存储 SSL 证书等数据。
-
-
 
 ```sh
 # 按照 yml 给docker配置。
@@ -1583,7 +1580,9 @@ networks:
 参考：https://docs.vllm.ai/en/latest/serving/distributed_serving.html
 https://mp.weixin.qq.com/s/fflQZOcNCAcltpzm6hB7AA
 
-https://mp.weixin.qq.com/s/tdubYmXNt98ZN6SB7iMIrw![截屏2025-03-30 18.37.48](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-30%2018.37.48.jpg)
+https://mp.weixin.qq.com/s/tdubYmXNt98ZN6SB7iMIrw
+
+![截屏2025-03-30 18.37.48](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-30%2018.37.48.jpg)
 
 上面的swarm集群部署解决不了资源整合的 问题导致了单个节点资源不足就无法在这个节点部署服务。
 
@@ -1710,22 +1709,16 @@ Demands:
 ```sh
 docker exec -it f474c557b8a6 /bin/bash
 # --tensor-parallel-size 单台机器的GPU数量，--pipeline-parallel-size 节点数量，vllm GPU只能1 2 4 8 这样的总数量运行。
-vllm serve /model/deepseek-r1-70b-AWQ \
+ vllm serve /model/deepseek-r1-70b-AWQ \
      --tensor-parallel-size 2 \
      --pipeline-parallel-size 2 \
-     --max_model_len 53520 \
+     --max-model-len 53520 \
      --gpu-memory-utilization 0.8 \
-     --served_model_name deepseek-r1-70b-AWQ
-     --api-key jisudf*&QW123
+     --served-model-name deepseek-r1-70b-AWQ \
+     --api-key 'jisudf*&QW123'
 ```
 
 ![微信图片_20250330222345](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330222345.png)
-
-
-
-
-
-
 
 
 
@@ -1906,7 +1899,7 @@ networks:
 
 记得在open webUI web管理界面添加 嵌入模型。
 
-![微信图片_20250402090321](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250402090321.png)
+![微信图片_20250402181950](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250402181950-3589288.png)
 
 
 
@@ -2243,3 +2236,31 @@ services:
 进入 嵌入式模型容器中，查看日志，有可能是 truncate 没有切，导致的 超过了 最大承受token。
 
 在 嵌入模型容器的 yml 文件中 配置 自动切分功能参数，参考 HuggingFace Text Embeddings Inference 官网GitHub 即可。
+
+#### · RAG 时遇到了 Please reduce the length of the messages 报错
+
+![微信图片_20250402181036](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250402181036.png)
+
+我们即使在vLLM中设置了`max-model-len 53520`，也可能在rag时报这样的错误；
+
+因为：
+
+**RAG的上下文叠加特性**
+RAG系统会将检索到的知识库内容直接拼接到用户输入中（称为“增强”）。若知识库文档分块过大或检索结果过多，即使原始用户提问很短，最终输入也会呈现“用户问题+多篇长文档”的结构。例如：
+
+- 用户输入：50 tokens
+- 检索到3篇文档，每篇2000 tokens
+- 总输入量：50 + 3×2000 = 6050 tokens
+
+解决办法：
+
+**滑动窗口分块**：将长文档按500-800 tokens为单位分割，重叠率建议15%，如每块保留前一块的75 tokens。
+
+**限制召回内容规模**：设置Top-K阈值，仅保留相关性最高的3-5个知识块。
+
+在open webUI 中设置。
+
+![微信图片_20250402181950](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250402181950.png)
+
+然后重新传一下 知识库中的文档。
+

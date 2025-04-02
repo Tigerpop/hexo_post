@@ -1,7 +1,7 @@
 ---
 layout: posts
 title: 本地部署Deepseek实现RAG并联网搜索
-date: 2025-3-21 10:08:18
+date: 2025-4-2 09:08:18
 description: "这是文章开头，显示在主页面，详情请点击此处。"
 categories: 
 - "机器学习"
@@ -23,6 +23,10 @@ tags:
 - "deepseek"
 - "集群"
 - "swarm"
+- "Ray"
+- "嵌入模型"
+- "Text Embeddings Inference"
+- "bge-large-zh-v1.5"
 ---
 
 
@@ -33,7 +37,7 @@ tags:
 
 使用多种方案部署前，需要先做好准备工作。
 
-# 一、前戏准备
+# 一、前期准备
 
 ## 1、系统、存储及驱动情况
 
@@ -1173,7 +1177,7 @@ services:
 
 #### 2.1.2.3、改换嵌入模型
 
-先下载好嵌入模型然后修改 docker的 yml文件，web界面中管理员面板；设置；文档中自己修改。
+见 目录《思路二：vllm部署Deepseek》
 
 
 
@@ -1327,7 +1331,9 @@ https://mp.weixin.qq.com/s/tdubYmXNt98ZN6SB7iMIrw
 wget https://github.com/vllm-project/vllm/blob/main/examples/online_serving/run_cluster.sh
 ```
 
-##### 1.2.2.1、Docker Swarm 基础
+##### 1.2.2.1、选项一：通过swarm部署
+
+##### Docker Swarm 集群基础
 
 参考：https://www.bilibili.com/video/BV1ZM4m1Z75k/?spm_id_from=333.337.search-card.all.click&vd_source=a07523372ea1438247b770c295f20822
 
@@ -1424,7 +1430,7 @@ docker swarm 和 k8s 是竞争关系，但是 docker swarm 没有竞争过k8s，
 
 
 
-##### 1.2.2.2、具体部署
+##### 具体操作
 
 在 Docker Swarm 的集群架构中，**所有 YAML 文件都需要在主节点上运行**。
 
@@ -1432,6 +1438,288 @@ docker swarm 和 k8s 是竞争关系，但是 docker swarm 没有竞争过k8s，
 
 参考  https://gist.github.com/coltonbh/374c415517dbeb4a6aa92f462b9eb287
 
+对主从节点每一台机器作如下操作：
+
+```sh
+nvidia-smi -a # 查看 GPU的具体 uuid
+
+sudo vim /etc/docker/daemon.json
+# 改成如下
+# NVIDIA-GPU 名字是可以自定义的，调用的时候注意点。
+------------------------------------ daemon.json ------------------------------------
+{
+    "registry-mirrors": [
+        "https://docker.m.daocloud.io",
+        "https://mirror.ccs.tencentyun.com",
+        "https://func.ink",
+        "https://proxy.1panel.live",
+        "https://docker.zhai.cm"
+    ],
+    "default-runtime": "nvidia",
+    "runtimes": {
+      "nvidia": {
+        "path": "nvidia-container-runtime",
+        "runtimeArgs": []
+        }
+    },
+    "node-generic-resources": [
+      "NVIDIA-GPU=GPU-c8fcc40e-7aef-0401-1519-2e8b2ef1521b",
+      "NVIDIA-GPU=GPU-a27b8ea5-b0bf-3a21-90ff-e9417f58ff11"
+      ]
+}
+------------------------------------ daemon.json ------------------------------------
+```
+
+在主节点机器中 编辑 vllm-head.yml vllm-worker1.yml vllm-worker1.yml 等
+
+```sh
+vim vllm-head.yml 
+
+services:
+  vllm-head:
+    image: vllm/vllm-openai:latest
+    #container_name: vllm-head
+    restart: unless-stopped
+    command:
+      - "--head"
+      - "--model=/models/deepseek-r1-70b"
+      - "--tensor_parallel_size=2"         # 单机 GPU 数（2卡并行）
+      - "--pipeline_parallel_size=2"       # 总节点数（主+1从）
+      - "--served-model-name=deepseek-r1-70b-AWQ"
+      - "--max-model-len=8192"
+      - # 加上一些约束条件，让 显存不要跑爆了，才能正常启动，可以参考单机情况。
+    volumes:
+      - /home/cys/data/models/deepseek-r1-70b-AWQ:/models/deepseek-r1-70b-AWQ:ro
+    environment:
+      #- NVIDIA_VISIBLE_DEVICES=all         # 让容器能访问所有 GPU
+      #- NVIDIA_DRIVER_CAPABILITIES=all
+      - CUDA_VISIBLE_DEVICES=0,1           # 只使用 0 和 1 号 GPU
+      #- NVIDIA_VISIBLE_DEVICES=0,1
+      - VLLM_HOST_IP=10.5.9.252            # 主节点 IP
+      - RAY_HEAD_IP=10.5.9.252             # Ray 通信地址
+      - RAY_HEAD_PORT=6379
+      - NCCL_SOCKET_IFNAME=enp1s0          # 跨节点通信接口
+    ports:
+      - "8000:8000"
+      - "6379:6379"
+    networks:
+      vllm-cluster:
+        ipv4_address: 10.10.0.100
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == cysserver     # # 只在 指定  的节点上运行
+      resources:
+        reservations:
+          generic_resources:
+            - discrete_resource_spec:
+                kind: "nvidia-gpu"         #"NVIDIA-GPU"
+                value: 2
+networks:
+  vllm-cluster:
+    driver: overlay
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24
+```
+
+```sh
+vim vllm-worker.yml
+# 对 deploy 部分 做类似上面的修改。
+
+services:
+  vllm-worker:
+    runtime: nvidia
+    image: vllm/vllm-openai:latest
+    #container_name: vllm-worker
+    restart: unless-stopped
+    command:
+      - "--worker"
+      - "--model=/models/deepseek-r1-70b"
+    volumes:
+      - /home/cys/models/deepseek-r1-70b-AWQ:/models/deepseek-r1-70b:ro
+    environment:
+      - CUDA_VISIBLE_DEVICES=1             # 仅使用第二块 GPU
+      - RAY_HEAD_IP=10.5.9.252:6379        # 指向主节点
+      - NCCL_SOCKET_IFNAME=eno1            # 通信网卡接口
+    networks:
+      vllm-cluster:
+        ipv4_address: 10.10.0.101          # 不同从节点需修改 IP
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == cys           # 强制只在名为cys的节点运行
+          #- node.labels.gpu == 1           # 确保从节点有 1 块 GPU
+       # 对 deploy 部分 做类似上面主节点的修改。
+networks:
+  vllm-cluster:
+    external: true                         # 复用主节点网络
+    name: vllm-cluster
+```
+
+加标签，yml 文件中有通过标签 指定服务具体落在的哪个节点。
+
+```sh
+ docker node update --label-add node.hostname=cys cys
+ docker node update --label-add node.hostname=cysserver cysserver
+```
+
+在主节点机器上 作 swarm 初始化，然后在各个从节点 以worker身份加入 warm 集群。
+
+具体操作 参考 什么的Docker Swarm基础。
+
+###### 问题：
+
+通过 docker swarm 集群部署的 大模型，并没有实现 对算力资源的 汇总，而仅仅是像一个普通的分布式应用一样选择把服务部署在哪一个节点中运行，顶多只是 这个节点坏了，有一个 新节点 补充 类似这样。
+
+如果每一个节点的GPU 资源都不足以部署此大模型， 那这样的 docker swarm 集群部署 大模型无法成功，所以这种 集群分布式部署不是我们要的 方式。
+
+那我们应该用哪一种 分布式的部署方式呢？
+
+答案就在vllm 的官网中，其实 下载 vllm github 中的 分布式部署脚本，可以用它自带的ray 集群实现对资源的整合调度。
+
+##### 1.2.2.2、选项二：通过 ray 集群部署
+
+参考：https://docs.vllm.ai/en/latest/serving/distributed_serving.html
+https://mp.weixin.qq.com/s/fflQZOcNCAcltpzm6hB7AA
+
+https://mp.weixin.qq.com/s/tdubYmXNt98ZN6SB7iMIrw![截屏2025-03-30 18.37.48](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E6%88%AA%E5%B1%8F2025-03-30%2018.37.48.jpg)
+
+上面的swarm集群部署解决不了资源整合的 问题导致了单个节点资源不足就无法在这个节点部署服务。
+
+为了解决此问题，我们用vllm 推荐的 分布式部署方式。（我在swarm 集群部署上面绕了一个好大的弯，以后都优先使用官网推荐的最佳实践，不要自己折腾，费劲不讨好。）
+
+下载官方多节点脚本到本地
+
+```sh
+cd /home/cys/docker_data/vLLM
+
+# 网页上的 blob 改成 raw 就能直接哟个 wget 下载下来。
+# https://github.com/vllm-project/vllm/blob/main/examples/online_serving/run_cluster.sh
+wget https://github.com/vllm-project/vllm/raw/main/examples/online_serving/run_cluster.sh
+```
+
+**部署ray集群**
+
+**主节点10.5.9.252**
+
+```sh
+bash run_cluster.sh \
+                vllm/vllm-openai \
+                10.5.9.252 \
+                --head \
+                /home/cys/data/models/deepseek-r1-70b-AWQ \
+                -v /home/cys/data/models/deepseek-r1-70b-AWQ/:/model/deepseek-r1-70b-AWQ/ \
+                -e VLLM_HOST_IP=10.5.9.252 \
+                -e GLOO_SOCKET_IFNAME=enp1s0 \
+                -e NCCL_SOCKET_IFNAME=enp1s0
+```
+
+> enp1s0 是 看ip 走那个网口 得出的
+
+![微信图片_20250330182312](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330182312.png)
+
+此时再开一个窗口，进入主节点的容器中查看ray 集群。
+
+```sh
+docker exec -it f474c557b8a6 /bin/bash
+root@cysserver:/vllm-workspace# ray status 
+======== Autoscaler status: 2025-03-30 03:27:55.102175 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_8e51bfc57e87e7c4c7c44817444eabd64c1b2fd109e67d065110c5a1
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/24.0 CPU
+ 0.0/2.0 GPU
+ 0B/484.01GiB memory
+ 0B/9.73GiB object_store_memory
+
+Demands:
+ (no resource demands)
+```
+
+**从节点10.5.9.253**
+
+```sh
+先统一 ray 版本
+# 主从节点之间，vllm-openai 镜像版本差异导致 Ray 版本不同，推荐 
+# docker save -o vllm.tar vllm/vllm-openai:ddddddd版本在docker ps -a查看，可以是latest
+# md5sum vllm.tar > vllm.tar.md5
+# 传输过，连带着md5文件。scp vllm.tar* cys@10.5.9.252:/home/cys/data/models/docker-images-warehouse
+# 在机器2执行
+# cd /home/cys/data/models/docker-images-warehouse
+# 验证 md5sum -c vllm.tar.md5 看看ok不ok。
+# 删除 老的版本的 vllm ，docker rmi XXXXXXX  
+# docker load -i vllm.tar
+
+```
+
+```sh
+bash run_cluster.sh \
+                vllm/vllm-openai \
+                10.5.9.252 \
+                --worker \
+                /home/cys/models/deepseek-r1-70b-AWQ \
+                -v /home/cys/models/deepseek-r1-70b-AWQ/:/model/deepseek-r1-70b-AWQ/ \
+                -e VLLM_HOST_IP=10.5.9.253 \
+                -e GLOO_SOCKET_IFNAME=eno1 \
+                -e NCCL_SOCKET_IFNAME=eno1
+```
+
+> eno1 是 看ip 走那个网口 得出的
+
+此时再开一个窗口，进入主节点的容器中查看ray 集群。
+
+```sh
+docker exec -it f474c557b8a6 /bin/bash
+root@cysserver:/vllm-workspace# ray status 
+======== Autoscaler status: 2025-03-30 11:21:02.211262 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_921f86c035112492b0daccabd0f373361ea3a721370c3cbcc1dc32ea
+ 1 node_4260699a5c1bfdf24d9a886b7aec5e38b7f5e42ab38a2427c13e8366
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/48.0 CPU
+ 0.0/4.0 GPU
+ 0B/725.54GiB memory
+ 0B/19.46GiB object_store_memory
+
+Demands:
+ (no resource demands)
+```
+
+在ray集群部署好之后可以看见，在一台机器上可以调用整个集群的资源了。
+在主节点进入vllm的容器，启动 vllm 服务
+
+```sh
+docker exec -it f474c557b8a6 /bin/bash
+# --tensor-parallel-size 单台机器的GPU数量，--pipeline-parallel-size 节点数量，vllm GPU只能1 2 4 8 这样的总数量运行。
+vllm serve /model/deepseek-r1-70b-AWQ \
+     --tensor-parallel-size 2 \
+     --pipeline-parallel-size 2 \
+     --max_model_len 53520 \
+     --gpu-memory-utilization 0.8 \
+     --served_model_name deepseek-r1-70b-AWQ
+     --api-key jisudf*&QW123
+```
+
+![微信图片_20250330222345](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330222345.png)
 
 
 
@@ -1441,10 +1729,82 @@ docker swarm 和 k8s 是竞争关系，但是 docker swarm 没有竞争过k8s，
 
 
 
+### 1.3、嵌入模型部署
+
+参考： https://blog.csdn.net/make_progress/article/details/146051006
+
+https://github.com/huggingface/text-embeddings-inference
 
 
 
-### 1.3、open webUI调用vllm
+文本嵌入推理（TEI，Text Embeddings Inference ）是HuggingFace研发的一个用于部署和服务开源文本嵌入和序列[分类模型](https://so.csdn.net/so/search?q=分类模型&spm=1001.2101.3001.7020)的工具包。TEI兼容OpenAI的嵌入模型的规范。 我们用到的就是它。
+我们选用 bge-large-zh-v1.5 模型。
+
+先在国内的ModelScope上下载BAAI/bge-reranker-large模型；
+
+```sh
+modelscope download --model BAAI/bge-large-zh-v1.5 --local_dir /home/cys/data/models/embeddingModel/.    
+```
+
+建立一个 docker 容器专门提供嵌入服务；
+
+```sh
+cd /home/cys/docker_data/embeddingModel
+mkdir -p bge-large-zh-v1.5
+cd /home/cys/docker_data/embeddingModel/bge-large-zh-v1.5
+
+vim docker-compose.yml
+------------------------------ docker-compose.yml ------------------------------
+services:
+  text-embeddings-inference:
+    user: "0:0"
+    image: ghcr.io/huggingface/text-embeddings-inference:1.6
+    #runtime: nvidia
+    ports:
+      - "8002:80"
+    volumes:
+      - "/home/cys/data/models/embeddingModel:/data"  # bge-large-zh-v1.5:/data"
+    environment:
+      - EMBEDDING_API_KEY=wiekdoid@JIDj124123
+    command: ["--model-id", "/data/bge-large-zh-v1.5", "--auto-truncate"]
+    networks:
+      - my-network  # 直接引用已存在的网络
+
+networks:
+  my-network:
+    external: true  # 只引用外部已存在的网络
+    name: vllm-network
+------------------------------ docker-compose.yml ------------------------------
+
+docker compose up -d
+```
+
+检查是否可用
+
+```sh
+curl -X POST "http://localhost:8002/embed" -H "Content-Type: application/json" -d '{
+  "inputs": ["你好，世界"],
+  "truncate": false
+}'
+# 看看 会不会返回false。
+```
+
+注意：TEI当前不会自动截断输入。您可以通过在请求中设置`truncate: true`来启用此功能。
+
+在官网github中可见 
+
+```sh
+      --auto-truncate
+          Automatically truncate inputs that are longer than the maximum supported size
+
+          Unused for gRPC servers
+
+          [env: AUTO_TRUNCATE=]
+```
+
+
+
+### 1.4、open webUI调用vllm
 
 ```sh
 mkdir -p /home/cys/docker_data/openwebui2
@@ -1463,7 +1823,8 @@ services:
       - ENABLE_OPENAI_API=true
       
       # 指向本地 vLLM 的 OpenAI 兼容接口,即使你设置 container_name 为 deepseek-container，Docker内部仍然会将这个容器注册为服务名 vllm-openai，所以其他同网络的容器可以通过 “vllm-openai” 访问它
-      - OPENAI_API_BASE_URL=http://vllm-openai:8000/v1
+      # 这里看前面vllm中怎么写，如果写了http://10.5.9.252:8000/v1 这里也要写这个。
+      - OPENAI_API_BASE_URL=http://vllm-openai:8000/v1     
       
       # 设置与 vLLM 一致的 API 密钥
       - OPENAI_API_KEYS=jisudf*&QW123
@@ -1495,6 +1856,57 @@ docker compose up -d
 ![微信图片_20250320155359](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250320155359.png)
 
 ![微信图片_20250320155402](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250320155402.png)
+
+分布式vllm ，open webUI如下：
+
+docker-compose.yml
+
+```yaml
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:cuda
+    environment:
+      # 禁用 ollama 连接（注释或删除该行）
+      # - OLLAMA_API_BASE_URL=http://10.5.9.252:11434
+      
+      # 启用 OpenAI 兼容 API（必须开启）
+      - ENABLE_OPENAI_API=true
+      
+      # 指向本地 vLLM 的 OpenAI 兼容接口,即使你设置 container_name 为 deepseek-container，Docker内部仍然会将这个容器注册为服务名 vllm-openai，所以其他同网络的容器可以通过 “vllm-openai” 访问它
+      - OPENAI_API_BASE_URL=http://vllm-openai:8000/v1
+      
+      # 设置与 vLLM 一致的 API 密钥
+      - OPENAI_API_KEYS=jisudf*&QW123
+      
+      # 其他原有配置保持不变
+      - GLOBAL_LOG_LEVEL=DEBUG
+      - HF_ENDPOINT=https://hf-mirror.com
+      - CORS_ALLOW_ORIGIN=*
+      - RAG_EMBEDDING_MODEL=bge-m3
+      - DEFAULT_MODELS=deepseek-r1-70b-AWQ  # 需与 vLLM 的 --served-model-name 参数一致
+      - ENABLE_OAUTH_SIGNUP=true
+      # 设置默认的 Embedding 模型名称（用于内部记录或日志）
+      - RAG_EMBEDDING_MODEL=bge-large-zh-v1.5
+      # 指定 Embedding API 服务的地址，确保该地址在同一网络内可访问
+      - EMBEDDING_API_BASE_URL=http://10.5.9.252:8002/v1
+      - EMBEDDING_API_KEYS=wiekdoid@JIDj124123     # 这里用相同的 Key 关联上
+    ports:
+      - 8080:8080
+    volumes:
+      - /home/cys/data/docker-data/open_webui_data:/app/backend/data
+    networks:
+      - my-network
+networks:
+  my-network:
+    external: true
+    name: vllm-network
+```
+
+> 以上加入了 嵌入模型的调用，别的没有太大变化。
+
+记得在open webUI web管理界面添加 嵌入模型。
+
+![微信图片_20250402090321](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250402090321.png)
 
 
 
@@ -1765,7 +2177,69 @@ services:
 1. **容器与宿主机之间的端口映射：** 自定义网络不会影响容器与宿主机之间的端口映射。端口映射是在容器启动时通过 `-p` 参数或在 Compose 文件中通过 `ports` 指定的，用于将宿主机的特定端口转发到容器的端口。这些映射在自定义网络中仍然有效。
 2. **容器连接互联网：** 默认情况下，Docker 使用 `bridge` 网络驱动程序创建的自定义网络允许容器访问外部互联网。因此，容器加入自定义网络后，通常仍能连接互联网。但如果使用其他网络驱动程序（如 `macvlan`），可能需要额外配置以确保互联网连接。
 
+#### · 无法科学上网使用docker技巧
 
+在能科学上网的机器 下载下来镜像，打包成 .tar 文件，复制到不能科学上网的机器中；
 
+按照下面例子操作
 
+```sh
+ # 在能科学上网的机器 下载下来镜像，打包成 .tar 文件
+ docker save -o vllm.tar vllm/vllm-openai:dddddddddddd
+ 
+ # 在不能科学上网的机器执行
+ docker load -i vllm.tar
+```
 
+#### · vllm集群遇到 GLOO、NCCL 报错
+
+![微信图片_20250330215009](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330215009.png)
+
+![微信图片_20250330215013](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330215013.png)
+
+先看看ip 用的哪个网口；
+
+然后在 run_cluster.sh 脚本中加入 `-e GLOO_SOCKET_IFNAME=对应网口  -e NCCL_SOCKET_IFNAME=对应网口` 环境变量。
+
+#### · vllm集群遇到 The model's max seq 报错
+
+![微信图片_20250330215145](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330215145.png)
+
+给我们提示了 ` Try increasing gpu_memory_utilization or decreasing max_model_len when initializing the engine. [repeated 2x across cluster]`
+
+可以从运行 vllm serve 后的 提示中看到全部的 args 参数表中
+
+![微信图片_20250330220106](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330220106.png)
+
+找 gpu_memory_utilization、max_model_len。
+
+如上图显示，硬件只能支持到  ` KV cache (69040)` 于是我们把 参数加上
+
+```sh
+ vllm serve /model/deepseek-r1-70b-AWQ \
+     --tensor-parallel-size 2 \
+     --pipeline-parallel-size 2 \
+     --max_model_len 69040
+```
+
+#### · vllm集群遇到 CUDA out of memory 报错
+
+![微信图片_20250330221123](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330221123.png)
+
+杀死占用显存多的进程，然后
+
+```sh
+ vllm serve /model/deepseek-r1-70b-AWQ \
+     --tensor-parallel-size 2 \
+     --pipeline-parallel-size 2 \
+     --max_model_len 69040 \
+     --gpu-memory-utilization 0.8
+```
+
+#### · open webUI知识库上传文件遇到 上传 报错
+
+`Extracted content is not available for this file. Please ensure that the file is processed before proceeding.`
+
+进入 嵌入式模型容器中，查看日志，有可能是 truncate 没有切，导致的 超过了 最大承受token。
+
+在 嵌入模型容器的 yml 文件中 配置 自动切分功能参数，参考 HuggingFace Text Embeddings Inference 官网GitHub 即可。

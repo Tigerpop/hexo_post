@@ -2264,3 +2264,64 @@ RAG系统会将检索到的知识库内容直接拼接到用户输入中（称�
 
 然后重新传一下 知识库中的文档。
 
+#### · 更新容器的服务
+
+以open webUI的yaml文件为例子
+
+```yaml
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:cuda
+    environment:
+      # 禁用 ollama 连接（注释或删除该行）
+      # - OLLAMA_API_BASE_URL=http://10.5.9.252:11434
+      
+      # 启用 OpenAI 兼容 API（必须开启）
+      - ENABLE_OPENAI_API=true
+      
+      # 指向本地 vLLM 的 OpenAI 兼容接口,即使你设置 container_name 为 deepseek-container，Docker内部仍然会将这个容器注册为服务名 vllm-openai，所以其他同网络的容器可以通过 “vllm-openai” 访问它
+      # 这里看前面vllm中怎么写，如果写了http://10.5.9.252:8000/v1 这里也要写这个。
+      - OPENAI_API_BASE_URL=http://vllm-openai:8000/v1     
+      
+      # 设置与 vLLM 一致的 API 密钥
+      - OPENAI_API_KEYS=jisudf*&QW123
+      
+      # 其他原有配置保持不变
+      - GLOBAL_LOG_LEVEL=DEBUG
+      - HF_ENDPOINT=https://hf-mirror.com
+      - CORS_ALLOW_ORIGIN=*
+      - RAG_EMBEDDING_MODEL=bge-m3
+      - DEFAULT_MODELS=deepseek-r1-70b-AWQ  # 需与 vLLM 的 --served-model-name 参数一致
+      - ENABLE_OAUTH_SIGNUP=true
+    ports:
+      - 8080:8080
+    volumes:
+      - /home/cys/data/docker-data/open_webui_data:/app/backend/data
+    networks:
+      - my-network
+networks:
+  my-network:
+    external: true
+    name: vllm-network
+```
+
+open webUI在昨天进行了版本更新，我们也更新一下。
+
+```sh
+# 备份一份数据文件
+tar -czvf openwebui-bak-$(date +%Y%m%d).tar.gz \
+  /home/cys/data/docker-data/open_webui_data
+
+# 进入yml 文件所在文件夹
+cd ~/docker_data/openwebui2
+
+# 停止容器
+docker compose down
+
+# 拉取最新的 Open WebUI 镜像
+docker pull ghcr.io/open-webui/open-webui:cuda
+
+# 重新启动容器
+docker compose up -d
+```
+

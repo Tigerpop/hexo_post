@@ -1716,6 +1716,16 @@ docker exec -it f474c557b8a6 /bin/bash
      --gpu-memory-utilization 0.8 \
      --served-model-name deepseek-r1-70b-AWQ \
      --api-key 'jisudf*&QW123'
+     
+# 更推荐这样 先在这个容器中建立一个 logs 文件夹然后搞一个 vllm.log 文件存日志。
+nohup vllm serve /model/deepseek-r1-70b-AWQ \
+     --tensor-parallel-size 2 \
+     --pipeline-parallel-size 2 \
+     --max-model-len 53520 \
+     --gpu-memory-utilization 0.8 \
+     --served-model-name deepseek-r1-70b-AWQ \
+     --api-key 'jisudf*&QW123' \
+  > ./logs/vllm.log 2>&1 &
 ```
 
 ![微信图片_20250330222345](%E6%9C%AC%E5%9C%B0%E9%83%A8%E7%BD%B2Deepseek%E5%AE%9E%E7%8E%B0RAG%E5%B9%B6%E8%81%94%E7%BD%91%E6%90%9C%E7%B4%A2/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250330222345.png)

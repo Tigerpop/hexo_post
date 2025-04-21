@@ -142,6 +142,14 @@ docker compose up -d
 
 
 
+# open webUI控制页面修改
+
+在设置、文档、中选择 “语意向量模型” ，重排模型等等修改成 ritrieve_zh_v1
+
+![微信图片_20250421105834](huggingface%E5%B5%8C%E5%85%A5%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250421105834.png)
+
+
+
 # 检查模型是否可用
 
 ```sh

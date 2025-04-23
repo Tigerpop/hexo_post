@@ -162,9 +162,9 @@ curl -X POST "http://localhost:8002/embed" -H "Content-Type: application/json" -
 
 
 
-# 可能遇到的报错 
+# 可能遇到的问题
 
-## onnx/model.onnx does not exist
+## 报错：onnx/model.onnx does not exist
 
 `onnx/model.onnx does not exist`
 
@@ -191,3 +191,38 @@ mv /data/onnx /home/cys/data/models/embeddingModel/ritrieve_zh_v1/onnx
 # 重新 docker compose up -d
 ```
 
+## yml中网络问题
+
+前文中的使用的是 一个 docker 的网络，在一台机器内部 部署了多个服务，如open webUI、 seargxn等等都是 
+
+```yaml
+    networks:
+      - my-network
+networks:
+  my-network:
+    external: true
+    name: vllm-network
+```
+
+但是事实上，在实际项目中 可以把嵌入模型部署到其他机器中，然后通过 IP:port 这样的地址加端口的方式调用，都是 容器映射到宿主机的某个端口，通过宿主机的IP 加上暴露的端口，最好配上一个 APIkey 来实现相互链接，而不是在一个 机器中使用上面的 docker network 网络。
+
+测试能否正常使用
+
+```sh
+# 假如嵌入模型部署在10.5.9.254的docker 容器中，在任意能访问10.5.9.254的机器上执行。
+curl -X POST http://10.5.9.254:8002/embed \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer wiekdoid@JIDj124123" \
+  -d '{"inputs":"样例文本"}'
+```
+
+## 在open webUI中上传大文件问题
+
+上传一个 5M docx 文件到知识库中， 居然花了我6个小时，我都惊了。
+
+解决方法是docker compose 的yaml文件中改 嵌入模型 cpu 处理 为 GPU 版本来处理。
+
+这也是我为什么推荐使用 另一台机器 部署 嵌入模型容器的原因，因为这两台机器的GPU资源 快要满了。
+
+同时注意：
+如果本地知识库上传了很大的几M 的文件 ，如果还选择了 “完整上下文模式”，很可能会导致 prompt 过大，从而出现 类似 ` ValueError: This model's maximum context length is 53520 tokens. However, you requested 3305318 tokens in the messages, Please reduce the length of the messages.` 这样的报错。

@@ -59,13 +59,13 @@ MCP 协议 就是 让模型来感知外部环境的协议（感知方法然后�
 
 
 
-# vscode中下载cline
+## vscode中下载cline
 
 ![截屏2025-04-23 14.58.24](MCP%E5%AD%A6%E4%B9%A0/%E6%88%AA%E5%B1%8F2025-04-23%2014.58.24-5394688.jpg)
 
 
 
-# 配置cline
+## 配置cline
 
 因为我以前是在本地用vllm的ray分布式部署了 deepseek r1 模型，使用的是 模仿openai的格式【openai compatible】调用；
 
@@ -97,7 +97,7 @@ nohup vllm serve /model/deepseek-r1-70b-AWQ \
 
 注意上面的 context Window ，以token计算（1 token ≈ 4个英文字符/1.5个中文字符），每次对话输入（↓）和输出（↑）的token都会占用窗口容量，当进度条达到 **128.0k 满额** 时，模型响应速度下降，生成内容可能出现逻辑断层，新输入内容将被截断，历史上下文自动遗忘早期信息，可能触发错误提示。
 
-# 测试
+## 测试
 
 提问cline ，明天长春天气怎么样？
 

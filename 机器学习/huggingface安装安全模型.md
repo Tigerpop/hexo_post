@@ -9,6 +9,7 @@ tags:
 - "dify"
 - " 网络安全模型"
 - "chat-template"
+
 ---
 
 # 背景
@@ -23,11 +24,11 @@ tags:
 
 
 
-![截屏2025-05-17 20.50.49](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E6%88%AA%E5%B1%8F2025-05-17%2020.50.49.jpg)
+![截屏2025-05-17 20.50.49](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E6%88%AA%E5%B1%8F2025-05-17%2020.50.49-7573165.jpg)
 
 我们使用 vllm ，点击 User this model 下的 vllm。
 
-![截屏2025-05-17 20.52.58](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E6%88%AA%E5%B1%8F2025-05-17%2020.52.58.jpg)
+![截屏2025-05-17 20.52.58](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E6%88%AA%E5%B1%8F2025-05-17%2020.52.58-7573165.jpg)
 
 ```sh
 # Deploy with docker on Linux:
@@ -239,14 +240,14 @@ services:
         --swap-space 8 \
         > vllm.log 2>&1 &
    ```
-   
+
    这样，vLLM 将加载 `/models/Foundation-Sec-8B` 下的本地模型，并以 OpenAI 兼容接口在 `http://localhost:8000` 提供服务。
-   
-   ![微信图片_20250518161721_699](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518161721_699.png)
-   
+
+   ![微信图片_20250518161721_699](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518161721_699-7573165.png)
+
    宿主机可见 两3090ti 都要跑满了。
 
-![微信图片_20250518160752_692](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518160752_692.png)
+![微信图片_20250518160752_692](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518160752_692-7573165.png)
 
 容器内看到这个说明已经 正确开启了。
 
@@ -256,16 +257,70 @@ services:
 
 现在dify的vllm插件中添加这个模型
 
-![微信图片_20250518204609_714](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204609_714.png)
+![微信图片_20250518204609_714](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204609_714-7573165.png)
 
-![微信图片_20250518204702_704](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204702_704.png)
+![微信图片_20250518204702_704](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204702_704-7573165.png)
 
 然后测试一下
 
-![微信图片_20250518204726_50](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204726_50.png)
+![微信图片_20250518204726_50](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204726_50-7573165.png)
 
 以网页形式发布，这里注意一下 ，要点击“发布更新”，因为这个模型是在10.5.9.251机器 dify 在10.5.9.252机器，所以刚刚发布会特别傻这个模型，还可能没有改过来，要反复操作然后等一等。
 
-![微信图片_20250518204804_715](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204804_715.png)
+![微信图片_20250518204804_715](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250518204804_715-7573165.png)
 
 上面是发布好的情况。
+
+
+
+# 标准交互
+
+从官网上推荐的例子中 改过来的，才是 最正的提问方法。
+
+注意我们这里 把前文中jinji2文件改成了这样， 关闭 vllm serve 开启的进程，docker 中重启一下 vllm 。
+
+```jinja2
+
+{% set system_message = '' %}
+{% if messages and messages[0].role == 'system' %}
+  {% set system_message = messages[0].content | trim %}
+  {% set messages = messages[1:] %}
+{% endif %}
+
+<|system|>{{ system_message }}<|end|>
+{% for msg in messages %}
+  {% if msg.role == 'user' %}
+<|user|>{{ msg.content | trim }}<|end|>
+  {% elif msg.role == 'assistant' %}
+<|assistant|>{{ msg.content | trim }}<|end|>
+  {% endif %}
+{% endfor %}
+<|assistant|><|endofreply|>
+```
+
+**注意这个截止符 `<|endofreply|>`, 在标准交互提问中 要明确截止符“stop”。**
+
+```
+curl -X POST "http://10.5.9.251:8000/v1/completions" \
+  -H "Authorization: Bearer cisjeifujlnu123-ccc" \
+	-H "Content-Type: application/json" \
+	--data '{
+		"model": "Foundation-Sec-8B",
+		"prompt": "please explain to me what Log4Shell is",
+		"max_tokens": 512,
+		"temperature": 0.5,
+    "stop": ["<|endofreply|>"]
+	}'
+```
+
+![微信图片_20250519182104_778](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250519182104_778.png)
+
+回答的话中 text 内容就是我们要的。![截屏2025-05-19 18.30.42](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E6%88%AA%E5%B1%8F2025-05-19%2018.30.42.jpg)
+
+而使用 dify 强行关联上，经常生成出一大堆的不相关内容回答，
+
+因为，我没有找到在dify 的哪里 去 实现 "stop": ["<|endofreply|>"] ，
+
+我看见dify 文档中有提到，但是我还是没找到在哪里去实现。
+
+![截屏2025-05-19 18.25.39](huggingface%E5%AE%89%E8%A3%85%E5%AE%89%E5%85%A8%E6%A8%A1%E5%9E%8B/%E6%88%AA%E5%B1%8F2025-05-19%2018.25.39.jpg)

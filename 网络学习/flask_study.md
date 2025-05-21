@@ -1,7 +1,7 @@
 ---
 layout: posts
 title: flask-study
-date: 2024-8-9 10:21:2
+date: 2025-5-20 10:21:2
 description: "这是文章开头，显示在主页面，详情请点击此处。"
 categories: 
 - "网络学习"
@@ -10,13 +10,16 @@ tags:
 - "flask"
 - "后端"
 
+
 ---
+
+
 
 
 
 # Flask整体框架流程
 
-![截屏2024-01-04 15.28.48](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-04%2015.28.48.jpg)
+![截屏2024-01-04 15.28.48](flask_study/%E6%88%AA%E5%B1%8F2024-01-04%2015.28.48.jpg)
 
 ## 简单例子
 
@@ -102,7 +105,7 @@ h4 {
 }
 ```
 
-![截屏2024-01-05 10.13.52](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-05%2010.13.52.jpg)
+![截屏2024-01-05 10.13.52](flask_study/%E6%88%AA%E5%B1%8F2024-01-05%2010.13.52.jpg)
 
 ​		注意上面的 `app = Flask(__name__)` 是在 “第一个flask项目” 下创建的，app对象实际上的执行 是发生在“第一个flask项目”下的。
 
@@ -110,7 +113,7 @@ h4 {
 
 # 项目的拆分
 
-![截屏2024-01-05 11.13.35](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-05%2011.13.35.jpg)
+![截屏2024-01-05 11.13.35](flask_study/%E6%88%AA%E5%B1%8F2024-01-05%2011.13.35.jpg)
 
 直接从App包 下调用 __init__.py 中的方法创建app对象就 好了。一个 App 就是一个 flask 应用。
 
@@ -171,7 +174,7 @@ def index():
 
 # 路由
 
-![截屏2024-01-05 20.41.25](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-05%2020.41.25.jpg)
+![截屏2024-01-05 20.41.25](flask_study/%E6%88%AA%E5%B1%8F2024-01-05%2020.41.25.jpg)
 
 ```python
 # views.py 下补充 
@@ -228,7 +231,7 @@ print(res.text)
 
 # Flask请求request/响应response
 
-![截屏2024-01-06 17.39.53](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-06%2017.39.53.jpg)
+![截屏2024-01-06 17.39.53](flask_study/%E6%88%AA%E5%B1%8F2024-01-06%2017.39.53.jpg)
 
 ```python
 from flask import Blueprint, Response,jsonify, render_template,request
@@ -373,9 +376,9 @@ def make_redirect():
 
 # cookie实现
 
-​		cookie的记忆是基于用户而不是浏览器；![截屏2024-01-06 20.23.45](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-06%2020.23.45.jpg)
+​		cookie的记忆是基于用户而不是浏览器；![截屏2024-01-06 20.23.45](flask_study/%E6%88%AA%E5%B1%8F2024-01-06%2020.23.45.jpg)
 
-![截屏2024-01-07 20.07.43](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-07%2020.07.43.jpg)
+![截屏2024-01-07 20.07.43](flask_study/%E6%88%AA%E5%B1%8F2024-01-07%2020.07.43.jpg)
 
 ```python
 # views.py
@@ -495,9 +498,9 @@ def logout():
 
 # session实现
 
-![截屏2024-01-07 20.46.56](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-07%2020.46.56.jpg)
+![截屏2024-01-07 20.46.56](flask_study/%E6%88%AA%E5%B1%8F2024-01-07%2020.46.56.jpg)
 
-![截屏2024-01-07 21.18.45](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-07%2021.18.45.jpg)
+![截屏2024-01-07 21.18.45](flask_study/%E6%88%AA%E5%B1%8F2024-01-07%2021.18.45.jpg)
 
 ```python
 # views.py
@@ -577,13 +580,13 @@ def create_app():
 
 Flask 使用 jinja2模版引擎。
 
-![截屏2024-01-11 10.42.45](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-11%2010.42.45.jpg)
+![截屏2024-01-11 10.42.45](flask_study/%E6%88%AA%E5%B1%8F2024-01-11%2010.42.45.jpg)
 
-![截屏2024-01-11 10.45.46](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-11%2010.45.46.jpg)
+![截屏2024-01-11 10.45.46](flask_study/%E6%88%AA%E5%B1%8F2024-01-11%2010.45.46.jpg)
 
-![截屏2024-01-11 10.46.38](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-11%2010.46.38.jpg)
+![截屏2024-01-11 10.46.38](flask_study/%E6%88%AA%E5%B1%8F2024-01-11%2010.46.38.jpg)
 
-![截屏2024-01-11 19.43.24](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-11%2019.43.24.jpg)
+![截屏2024-01-11 19.43.24](flask_study/%E6%88%AA%E5%B1%8F2024-01-11%2019.43.24.jpg)
 
 view.py
 
@@ -751,7 +754,7 @@ object relational mapping 对象关系映射；
 
 
 
-![截屏2024-01-14 19.49.26](flask_study.assets/%E6%88%AA%E5%B1%8F2024-01-14%2019.49.26.jpg)
+![截屏2024-01-14 19.49.26](flask_study/%E6%88%AA%E5%B1%8F2024-01-14%2019.49.26.jpg)
 
 ```python
 #  __init__.py
@@ -865,7 +868,7 @@ Flask使用migrate迁移后，无法检测到models，无法生成表，则 ***\
 
 ## 模型表操作
 
-![截屏2024-02-06 23.39.34](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-06%2023.39.34.jpg)
+![截屏2024-02-06 23.39.34](flask_study/%E6%88%AA%E5%B1%8F2024-02-06%2023.39.34.jpg)
 
 ```python
 # view.py
@@ -1068,7 +1071,7 @@ class User(db.Model):
 
 # 图书馆测试项目
 
-![截屏2024-02-28 08.45.02](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-28%2008.45.02.jpg)
+![截屏2024-02-28 08.45.02](flask_study/%E6%88%AA%E5%B1%8F2024-02-28%2008.45.02.jpg)
 
 app.py
 
@@ -1183,19 +1186,19 @@ class Publisher(db.Model):
 
 构建完表之后，就可以往表内写各种内容了。如果是vscode插件操作mysql可能出现数据库同步出现问题，此时需要找到migrations文件夹下最下面也就是最新的一个.py文件的名称，此名称去掉下划线，放入mysql数据库的alembic_version中。
 
-![截屏2024-02-28 08.59.23](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-28%2008.59.23.jpg)
+![截屏2024-02-28 08.59.23](flask_study/%E6%88%AA%E5%B1%8F2024-02-28%2008.59.23.jpg)
 
-![截屏2024-02-28 08.58.37](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-28%2008.58.37.jpg)
+![截屏2024-02-28 08.58.37](flask_study/%E6%88%AA%E5%B1%8F2024-02-28%2008.58.37.jpg)
 
 ​		通过模型让mysql构建好表的结构之后，我们在表内写入数据。
 
-![截屏2024-02-28 09.02.36](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-28%2009.02.36.jpg)
+![截屏2024-02-28 09.02.36](flask_study/%E6%88%AA%E5%B1%8F2024-02-28%2009.02.36.jpg)
 
-![截屏2024-02-28 09.02.56](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-28%2009.02.56.jpg)
+![截屏2024-02-28 09.02.56](flask_study/%E6%88%AA%E5%B1%8F2024-02-28%2009.02.56.jpg)
 
-![截屏2024-02-28 09.03.31](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-28%2009.03.31.jpg)
+![截屏2024-02-28 09.03.31](flask_study/%E6%88%AA%E5%B1%8F2024-02-28%2009.03.31.jpg)
 
-![截屏2024-02-28 09.03.48](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-28%2009.03.48.jpg)
+![截屏2024-02-28 09.03.48](flask_study/%E6%88%AA%E5%B1%8F2024-02-28%2009.03.48.jpg)
 
 view.py 视图脚本,基于视图脚本写各个html的前端逻辑
 
@@ -1368,9 +1371,9 @@ publisher_detail.html
 
 ## 缓存例子
 
-![截屏2024-02-29 09.35.45](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-29%2009.35.45.jpg)
+![截屏2024-02-29 09.35.45](flask_study/%E6%88%AA%E5%B1%8F2024-02-29%2009.35.45.jpg)
 
-![截屏2024-02-29 09.42.04](flask_study.assets/%E6%88%AA%E5%B1%8F2024-02-29%2009.42.04.jpg)
+![截屏2024-02-29 09.42.04](flask_study/%E6%88%AA%E5%B1%8F2024-02-29%2009.42.04.jpg)
 
 ​		使用flask插件 就三个步骤，先下载，再ext.py中初始化，最后再视图中使用。
 
@@ -1380,7 +1383,7 @@ publisher_detail.html
 
 ## 切面编程
 
-![截屏2024-03-01 10.56.21](flask_study.assets/%E6%88%AA%E5%B1%8F2024-03-01%2010.56.21.jpg)
+![截屏2024-03-01 10.56.21](flask_study/%E6%88%AA%E5%B1%8F2024-03-01%2010.56.21.jpg)
 
 views.py
 
@@ -1452,9 +1455,51 @@ for i in range(10):  # 故意测试一下。
 
 
 
-# 前后端分离  
+# flask四大内置对象
+
+**g**：global，突破变量存储位置限制，例如在 before_request装饰的钩子函数产生了一个后续用得到的变量就可以保存在g对象中，在视图函数中就可以用这个数据。
+
+**request**：请求对象，可以获取客户端提交过来的请求信息。
+
+**session**：会话技术，服务端会话技术的接口。
+
+**current_app**：app的配置信息，app对象获取，一定要在初始化之后使用。
+
+```
+g.star = 'jack'
+print(current_app)
+```
+
+
+
+# 静态文件目录static和模版文件目录templates
+
+​		需要去 Flask.py文件中去修改，才能变 templates的配置。但是我们不推荐在这里改。![截屏2024-08-25 20.40.41](flask_study/%E6%88%AA%E5%B1%8F2024-08-25%2020.40.41.jpg)
+
+​		给一个改动的例子，把app文件下的 static 和 templates 改到外面一层的文件。
 
 ```python
+# 在 __init__
+import os 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # 本文件的绝对路径的所在文件夹的所在文件夹，就是 上一层的文件夹。
+
+def create_app():
+  static_folder = os.path.join(BASE_DIR,'static')
+  template_folder = os.path.join(BASE_DIR,'template')
+	
+  app = Flask(__name__,static_folder=static_folder,
+             template_folder=template_folder)  # 改位置。
+
+```
+
+
+
+# 前后端分离
+
+​      ![截屏2024-08-29 20.07.25](flask_study/%E6%88%AA%E5%B1%8F2024-08-29%2020.07.25.jpg)
+
+```python
+# views.py
 from flask import Blueprint,render_template,jsonify,request 
 from .models import *
 
@@ -1483,7 +1528,20 @@ def users():
         return jsonify({'method':'PUT'})
     elif request.method == 'DELETE':
         return jsonify({'method':'DELETE'})
+    
 ```
+
+```python 
+import requests
+
+res = requests.get('http://127.0.0.1:5000/usres/')
+print(res.text)
+
+res = requests.post('http://127.0.0.1:5000/usres/')
+print(res.text)
+```
+
+
 
 
 
@@ -1492,12 +1550,202 @@ def users():
 ​		我们删除 view模块，新建一个 apis.py模块，对 上面的代码 修改，使用 api接口开发。
 之前用路由修饰器来访问到视图函数，现在该用单独的一个urls.py模块（路游文件）来实现访问视图函数。 restful 封装了查 增 改 删
 
-![截屏2024-09-10 14.50.54](flask_study.assets/%E6%88%AA%E5%B1%8F2024-09-10%2014.50.54.jpg)
+![截屏2024-09-10 14.50.54](flask_study/%E6%88%AA%E5%B1%8F2024-09-10%2014.50.54.jpg)
 
-先说一下 思路，就是在 exts模块中引入restful包的api，然后
+​		先说一下 思路，就是在 exts模块中引入restful包的api，然后在 写入exts的初始化的方法中，在初始化的时候把 app对象 和 这个插件api 对象绑定，把我们想要写的逻辑写进一个名叫 apis的模块的 函数中（充当视图函数），新建一个 urls模块 作路由用，这个路由模块中需要 关联上 apis模块中我们的逻辑 和 插件api对象，让索引能够找到 我们apis模块中 视图函数。（但是请在__init__模块中import 一下，不然urls模块不会执行）。
 
 ```python
+# exts.py
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_restful import Api
+
+db = SQLAlchemy() 
+migrate = Migrate()
+api = Api()
 
 
+def init_exts(app):
+    db.init_app(app=app)
+    migrate.init_app(app=app,db=db)
+    api.init_app(app=app)
 ```
+
+```python
+# apis.py
+from flask import jsonify
+from flask_restful import Resource
+
+# 类视图 CBV class based view
+# 视图函数 FBV function based view 
+
+class HelloResouce(Resource):
+    def get(self):
+        return jsonify({'msg':'get 请求'})
+    def post(self):
+        return jsonify({'msg':'post 请求'})
+```
+
+```python
+# urls.py
+# urls.py 路由文件
+
+from .exts import api
+from .apis import *
+
+# 路由
+api.add_resource(HelloResouce,'/hello/')
+```
+
+
+
+# 字段格式化及参数解析
+
+![截屏2024-09-19 14.47.35](flask_study/%E6%88%AA%E5%B1%8F2024-09-19%2014.47.35.jpg)
+
+```python
+# apis.py
+
+
+from flask import jsonify
+from flask_restful import Resource,fields,marshal_with,reqparse
+from .models import *
+
+# 类视图 CBV class based view
+# 视图函数 FBV function based view 
+
+class HelloResouce(Resource):
+    def get(self):
+        return jsonify({'msg':'get 请求'})
+    def post(self):
+        return jsonify({'msg':'post 请求'})
+
+# ------------------------------  字段格式化 ------------------------------ 
+# 定义返回给前端的数据格式
+# flask-restful
+# 一个字典，定义格式化，定义返回给前端的数据格式
+ret_field = {
+    'id':fields.Integer,
+    'name':fields.String,
+    'age':fields.Integer,
+    # 'status':fields.Integer,
+    # 'msg':fields.String,
+    #  'go':fields.String,
+    #  'data':fields.String,
+    'like':fields.String(default='ball'),
+    'url':fields.Url(endpoint='id',absolute=True) #  显示路由绝对路径。在urls模块中 endpoint在哪个路径，这里就会显示谁的路径。
+    #  'data2':fields.String(attribute='data') # 使用 data 的值。
+}
+
+class UserResource(Resource):
+    @marshal_with(ret_field)  # 把 对应的方法 通过这个装饰器 和 格式化定义关联上。
+    def get(self):
+        return {
+            'status':1,
+            'msg':'ok',
+            'data':'chenyushao'
+        }
+
+ret_field2 = {
+    'status':fields.Integer,
+    'msg':fields.String,
+    # user 对象
+    'data':fields.Nested(ret_field) # 调用 其他的 格式化要求。
+}
+
+class User2Resource(Resource):
+    @marshal_with(ret_field2)  # 把 对应的方法 通过这个装饰器 和 格式化定义关联上。
+    def get(self):
+        user = User.query.first() # 从数据库表中读第一行。
+        return {
+            'status':1,
+            'msg':'ok',
+            'data':user
+        }
+
+# ------------------------------  字段格式化 ------------------------------ 
+
+
+ret_field3 = {
+    'name':fields.String,
+    'age':fields.Integer,
+}
+
+ret_field4 = {
+    'status':fields.Integer,
+    'msg':fields.String,
+    # user 对象
+    'data':fields.List(fields.Nested(ret_field3)) # 调用 其他的 格式化要求。
+}
+
+class User3Resource(Resource):
+    @marshal_with(ret_field4)  # 把 对应的方法 通过这个装饰器 和 格式化定义关联上。
+    def get(self):
+        user = User.query.first() # 从数据库表中读第一行。
+        return {
+            'status':1,
+            'msg':'ok',
+            'data':user
+        }
+    
+# ------------------------------  字段格式化 ------------------------------ 
+
+# ------------------------------  参数解析 -------------------------------- 
+# 解析前端发送过来的数据
+parser = reqparse.RequestParser() 
+# 给parser 作一个规范声明，name 是提交过来的参数名称，类型，是否必须，没提交的提示 help。
+parser.add_argument('name',type=str,required=True,help='name是必须的参数。') 
+parser.add_argument('age',type=int,required=True,action='append') # append支持多个age的意思 
+# 随便从百度的网页的network 中 fetch 里， 点一下页面，找一个请求头的Cookes 来示范。
+parser.add_argument('BAIDUID',type=str,location='cookies') 
+
+class User4Resource(Resource):
+    def get(self):
+        # 获取参数
+        args = parser.parse_args()
+        name = args.get('name')
+        age = args.get('age')
+        BAIDUID = args.get('BAIDUID')
+        return {'name':name,'age':age,'BAIDUID':BAIDUID}
+
+# ------------------------------  参数解析 -------------------------------- 
+```
+
+```python
+# spider.py 单独运行这个 脚本来模仿 爬虫的访问。
+
+import requests
+
+# res = requests.get('http://127.0.0.1:5000/hello/')
+# print(res.json())
+
+# res = requests.post('http://127.0.0.1:5000/usres/')
+# print(res.text)
+
+# 根据返回的提示改的 请求需求。  
+res = requests.get('http://127.0.0.1:5000/user4/',
+                    json={'name':'lisi','age':'30'},
+                    headers={'Content-Type':'application/json',
+                    'Cookie':'BAIDUID=DBF491F84E3AC8F568BC6F6E3D8DF37C'
+                    })
+print(res.text)
+```
+
+
+
+
+
+
+
+# 实验部分
+
+
+
+![截屏2024-09-19 15.33.52](flask_study/%E6%88%AA%E5%B1%8F2024-09-19%2015.33.52.jpg)
+
+
+
+## 项目分析
+
+## 数据库设计
 

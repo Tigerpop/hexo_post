@@ -387,6 +387,47 @@ RAG 可视化界面操作。
 
 
 
+# 动态更新
+
+对于 docker compose 的 yaml 部署的 dify ，仅仅需要更新这三个容器就可以实现版本更新，但是注意好备份。注意步骤：
+
+1、备份 PostgreSQL
+
+2、备份你的挂载目录
+
+3、备份配置文件.env 和yaml
+
+4、修改docker-compose.yaml文件
+
+5、拉取镜像，并重新启动
+
+```bash
+# 根据你实际的容器名和用户名修改命令。在 .env 和 docker ps 中可以看见。
+# postgres 表示使用用户名；dify 是要备份的数据库名；docker-db-1 是容器名； 
+docker exec -t docker-db-1 pg_dump -U postgres dify > ./backup/dify_backup_$(date +%F).sql
+
+
+# 至少打包 Dify 主体部分 + PostgreSQL + Redis：
+tar czf backup_volumes_$(date +%F).tar.gz ./volumes/app ./volumes/db ./volumes/redis
+
+cp .env backup/.env.bak_$(date +%F)
+cp docker-compose.yml backup/docker-compose.yml.bak_$(date +%F)
+
+# yaml 文件中对以下三个容器修改。
+services:
+  api:
+    image: langgenius/dify-api:latest
+  web:
+    image: langgenius/dify-web:latest
+  worker:
+    image: langgenius/dify-api:latest
+    
+docker-compose pull
+docker-compose up -d
+```
+
+在docker ps 中可以看见 dify 版本。
+
 
 
 # 遇到的问题以及解决方法

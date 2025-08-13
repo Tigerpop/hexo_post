@@ -1,7 +1,7 @@
 ---
 layout: posts
 title: Dify笔记
-date: 2025-5-16 16:27:21
+date: 2025-8-13 16:27:21
 description: "这是文章开头，显示在主页面，详情请点击此处。"
 categories: 
 - "机器学习"
@@ -432,7 +432,7 @@ docker-compose up -d
 
 # 遇到的问题以及解决方法
 
-**1、发布的时候，会出现404分不到，在“探索”中打开却能正常访问。**
+### **1、发布的时候，会出现404分不到，在“探索”中打开却能正常访问。**
 
 这是因为我前面yaml配置中env配置中修改过端口号。手动在生成的URL中的IP后添加端口即可。
 
@@ -472,6 +472,191 @@ docker-compose up -d
 上方统一需要在252后加 8003 我前面改的端口号。
 
 
+
+### 2、Failed to parse response from plugin daemon to PluginDaemonBasicResponse
+
+遇到报错：
+
+> Failed to parse response from plugin daemon to PluginDaemonBasicResponse [PluginListResponse], url: plugin/a7060300-e4d0-426c-8690-5036fef955e7/management/list
+
+分析问题，是一个守护进程不停的访问，然后返回的格式又不匹配导致的。以下是分析过程：
+我们先通过 日志确定问题 `docker logs -f docker-plugin_daemon-1`,发现 
+
+> 2025/08/12 13:02:09 stdio.go:160: [INFO]plugin langgenius/huggingface_tei:0.0.3: Installed model: huggingface_tei 2025/08/12 13:02:09 stdio.go:160: [INFO]plugin langgenius/azure_openai:0.0.17: Installed model: azure_openai [GIN] 2025/08/12 - 13:02:23 | 200 |   19.930974ms |      172.20.0.8 | GET      "/plugin/a7060300-e4d0-426c-8690-5036fef955e7/management/list?page=1&page_size=100"
+
+而我通过 `docker network ls` 找到 `3efdfbe91ed7 docker_default`；
+
+` docker network inspect dify_default` 发现 前面日志中的 172.20.0.8 就是 docker-api-1。我们进一步看它的日志。
+
+`docker logs -f docker-api-1` 提示说 返回的格式不匹配:
+
+>  File "/app/api/.venv/lib/python3.12/site-packages/pydantic/main.py", line 253, in __init__    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ pydantic_core._pydantic_core.ValidationError: 1 validation error for PluginDaemonBasicResponse[PluginListResponse] data  Input should be a valid dictionary or instance of PluginListResponse [type=model_type, input_value=[{'id': 'f45acc46-9e4d-4f...5c71c2231', 'meta': {}}], input_type=list]    For further information visit https://errors.pydantic.dev/2.11/v/model_type
+
+
+我确定了是之前的 插件或者插件容器相关的内容导致的问题，
+
+解决思路如下：
+
+1、清理 PostgreSQL + Redis 中的内容；
+
+2、清理 本地残留插件文件；
+
+3、进入 docker-compose.yaml 文件查看是否版本有明显偏差；
+
+步骤：
+
+1、清理 PostgreSQL + Redis 中的内容：
+
+```bash
+# 查看有哪些表
+docker exec -it docker-db-1 psql -U postgres -l
+
+docker exec -it docker-db-1 psql -U postgres -d dify_plugin
+\dt
+# 以 dify_plugin 为例，逐个检查，发现 a7060300-e4d0-426c-8690-5036fef955e7 相关的就删除。
+select * from tool_installations;
+delete from tool_installations where tenant_id='a7060300-e4d0-426c-8690-5036fef955e7' ;
+exit
+
+# 清理 redis
+docker exec -it docker-redis-1 redis-cli
+FLUSHALL
+exit
+```
+
+![截屏2025-08-12 20.37.51](Dify%E7%AC%94%E8%AE%B0/%E6%88%AA%E5%B1%8F2025-08-12%2020.37.51.png)
+
+![截屏2025-08-12 23.00.55](Dify%E7%AC%94%E8%AE%B0/%E6%88%AA%E5%B1%8F2025-08-12%2023.00.55.png)
+
+但是一个一个删除很慢，用下面的脚本 模糊搜索 删除也行；
+
+`vim  clean_plugin.sh`
+
+```bash
+#!/bin/bash
+set -e
+
+PLUGIN_ID="$1"
+
+if [ -z "$PLUGIN_ID" ]; then
+    echo "❌ 用法: $0 <插件ID或关键字>"
+    exit 1
+fi
+
+# 容器名（改成你的）
+PG_CONTAINER="docker-db-1"
+REDIS_CONTAINER="docker-redis-1"
+
+echo "🔍 开始在 PostgreSQL 中搜索包含 [$PLUGIN_ID] 的记录..."
+PG_MATCHES=$(docker exec -i "$PG_CONTAINER" psql -U postgres -d dify -t -A -c "
+SELECT table_name, column_name
+FROM information_schema.columns
+WHERE table_schema='public';
+" | while IFS="|" read -r table column; do
+    docker exec -i "$PG_CONTAINER" psql -U postgres -d dify -t -A -c \
+    "SELECT '$table', '$column', $column FROM \"$table\" WHERE CAST($column AS TEXT) LIKE '%$PLUGIN_ID%'" \
+    2>/dev/null
+done)
+
+if [ -n "$PG_MATCHES" ]; then
+    echo "找到以下匹配记录："
+    echo "$PG_MATCHES"
+else
+    echo "✅ PostgreSQL 未找到匹配记录。"
+fi
+
+read -p "⚠️ 是否删除这些 PostgreSQL 记录？(y/n) " confirm
+if [[ "$confirm" == "y" ]]; then
+    docker exec -i "$PG_CONTAINER" psql -U postgres -d dify -t -A -c "
+    SELECT table_name, column_name
+    FROM information_schema.columns
+    WHERE table_schema='public';
+    " | while IFS="|" read -r table column; do
+        docker exec -i "$PG_CONTAINER" psql -U postgres -d dify -c \
+        "DELETE FROM \"$table\" WHERE CAST($column AS TEXT) LIKE '%$PLUGIN_ID%'" \
+        2>/dev/null || true
+    done
+    echo "🗑 PostgreSQL 相关记录已删除。"
+fi
+
+echo "🔍 开始在 Redis 中搜索包含 [$PLUGIN_ID] 的键和值..."
+REDIS_KEYS=$(docker exec -i "$REDIS_CONTAINER" redis-cli --scan | grep "$PLUGIN_ID" || true)
+REDIS_VAL_KEYS=$(docker exec -i "$REDIS_CONTAINER" redis-cli --scan | while read -r key; do
+    if docker exec -i "$REDIS_CONTAINER" redis-cli GET "$key" 2>/dev/null | grep -q "$PLUGIN_ID"; then
+        echo "$key"
+    fi
+done)
+
+if [ -n "$REDIS_KEYS$REDIS_VAL_KEYS" ]; then
+    echo "找到以下 Redis 相关键："
+    echo "$REDIS_KEYS"
+    echo "$REDIS_VAL_KEYS"
+else
+    echo "✅ Redis 未找到匹配记录。"
+fi
+
+read -p "⚠️ 是否删除这些 Redis 键？(y/n) " confirm
+if [[ "$confirm" == "y" ]]; then
+    echo "$REDIS_KEYS" "$REDIS_VAL_KEYS" | tr ' ' '\n' | sort -u | while read -r key; do
+        docker exec -i "$REDIS_CONTAINER" redis-cli DEL "$key" >/dev/null
+    done
+    echo "🗑 Redis 相关键已删除。"
+fi
+
+echo "🎯 清理完成。"
+```
+
+运行上面脚本
+
+```bash
+chmod +x clean_plugin.sh
+./clean_plugin.sh a7060300-e4d0-426c-8690-5036fef955e7 
+# a7060300-e4d0-426c-8690-5036fef955e7 是我的插件报错的提示内容。
+```
+
+2、清理 本地残留插件文件：
+
+`/home/cys/data/docker-data/dify/docker/volumes` 是我的本地位置，如果你的目录结构不同，请替换路径。
+
+```bash 
+# 分别进入下面两个文件夹中，然后删除和报错相关的内容。
+cd /home/cys/data/docker-data/dify/docker/volumes/plugin_daemon/plugin
+# 逐个检查，发现就 a7060300-e4d0-426c-8690-5036fef955e7 相关的就删除 rm 。
+cd /home/cys/data/docker-data/dify/docker/volumes/plugin_daemon/plugin_packages
+# 逐个检查，发现就 a7060300-e4d0-426c-8690-5036fef955e7 相关的就删除 rm 。
+```
+
+3、进入 docker-compose.yaml 文件修改；
+
+```bash
+docker-compose stop plugin_daemon
+docker-compose rm -f plugin_daemon
+
+docker rmi <plugin_daemon_image_name>
+```
+
+查看 GitHub中 项目的 `docker-compose.yaml `中的 `plugin_daemon`:
+
+![截屏2025-08-13 13.55.24](Dify%E7%AC%94%E8%AE%B0/%E6%88%AA%E5%B1%8F2025-08-13%2013.55.24.png)
+
+进入我们的  `docker-compose.yaml `中修改  `plugin_daemon`:，然后重新拉取，我这里是把  `langgenius/dify-plugin-daemon:latest:0.0.9-local` 改成 `langgenius/dify-plugin-daemon:0.2.0-local `。
+
+![截屏2025-08-13 13.57.24](Dify%E7%AC%94%E8%AE%B0/%E6%88%AA%E5%B1%8F2025-08-13%2013.57.24.png)
+
+```bash
+# 把yaml修改与Dify官方GitHub一致
+vim docker-compose.yaml 
+
+# 拉取
+docker-compose up -d plugin_daemon
+
+# 检查
+docker images | grep langgenius/dify-plugin-daemon
+```
+
+
+
+![截屏2025-08-13 13.59.54](Dify%E7%AC%94%E8%AE%B0/%E6%88%AA%E5%B1%8F2025-08-13%2013.59.54.png)问题解决了。
 
 
 

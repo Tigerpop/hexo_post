@@ -30,9 +30,9 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
-![截屏2025-08-18 20.37.21](%E6%89%8B%E5%86%99MCPserver.assets/%E6%88%AA%E5%B1%8F2025-08-18%2020.37.21.png)
+![截屏2025-08-18 20.37.21](%E6%89%8B%E5%86%99MCPserver/%E6%88%AA%E5%B1%8F2025-08-18%2020.37.21.png)
 
-![截屏2025-08-18 20.42.22](%E6%89%8B%E5%86%99MCPserver.assets/%E6%88%AA%E5%B1%8F2025-08-18%2020.42.22.png)
+![截屏2025-08-18 20.42.22](%E6%89%8B%E5%86%99MCPserver/%E6%88%AA%E5%B1%8F2025-08-18%2020.42.22.png)
 
 
 
@@ -273,7 +273,7 @@ https://openweathermap.org/
 
 看它需要怎么用。默认就三个参数 经纬度和APIkey。
 
-![截屏2025-08-21 20.18.53](%E6%89%8B%E5%86%99MCPserver.assets/%E6%88%AA%E5%B1%8F2025-08-21%2020.18.53.jpg)
+![截屏2025-08-21 20.18.53](%E6%89%8B%E5%86%99MCPserver/%E6%88%AA%E5%B1%8F2025-08-21%2020.18.53.jpg)
 
 从右边可见 还有基于别的 方法查询，比如城市名称。
 
@@ -285,7 +285,7 @@ https://api.openweathermap.org/data/2.5/weather?q=beijing&appid=4cc5540e55d86d33
 {"coord":{"lon":116.3972,"lat":39.9075},"weather":[{"id":501,"main":"Rain","description":"moderate rain","icon":"10n"}],"base":"stations","main":{"temp":299.35,"feels_like":299.35,"temp_min":299.35,"temp_max":299.35,"pressure":1003,"humidity":95,"sea_level":1003,"grnd_level":999},"visibility":10000,"wind":{"speed":1.34,"deg":14,"gust":1.94},"rain":{"1h":1.6},"clouds":{"all":90},"dt":1755778408,"sys":{"country":"CN","sunrise":1755725505,"sunset":1755774231},"timezone":28800,"id":1816670,"name":"Beijing","cod":200}
 ```
 
-![截屏2025-08-21 20.55.57](%E6%89%8B%E5%86%99MCPserver.assets/%E6%88%AA%E5%B1%8F2025-08-21%2020.55.57.jpg)
+![截屏2025-08-21 20.55.57](%E6%89%8B%E5%86%99MCPserver/%E6%88%AA%E5%B1%8F2025-08-21%2020.55.57.jpg)
 
 
 
@@ -487,7 +487,7 @@ if __name__ == "__main__":
 uv run weather_sse.py
 ```
 
-![截屏2025-08-22 14.08.57](%E6%89%8B%E5%86%99MCPserver.assets/%E6%88%AA%E5%B1%8F2025-08-22%2014.08.57.jpg)
+![截屏2025-08-22 14.08.57](%E6%89%8B%E5%86%99MCPserver/%E6%88%AA%E5%B1%8F2025-08-22%2014.08.57.jpg)
 
 再配置json文件
 
@@ -531,9 +531,9 @@ ip addr show docker0
 }
 ```
 
-![截屏2025-08-22 14.30.25](%E6%89%8B%E5%86%99MCPserver.assets/%E6%88%AA%E5%B1%8F2025-08-22%2014.30.25.jpg)
+![截屏2025-08-22 14.30.25](%E6%89%8B%E5%86%99MCPserver/%E6%88%AA%E5%B1%8F2025-08-22%2014.30.25.jpg)
 
-![截屏2025-08-22 14.29.59](%E6%89%8B%E5%86%99MCPserver.assets/%E6%88%AA%E5%B1%8F2025-08-22%2014.29.59.jpg)
+![截屏2025-08-22 14.29.59](%E6%89%8B%E5%86%99MCPserver/%E6%88%AA%E5%B1%8F2025-08-22%2014.29.59.jpg)
 
 
 

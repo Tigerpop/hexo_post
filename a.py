@@ -1,3 +1,5 @@
 a = 'okokokok'
 a = a+'kokokokoko'
-print(a)
+b = 'aaa'
+b = a
+print(b)

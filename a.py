@@ -1,2 +1,3 @@
-import flask
-a = "this is a good man!"
+a = 'okokokok'
+a = a+'kokokokoko'
+print(a)

@@ -1,4 +1,5 @@
-a=1+2
-b=3+8
+a=1
+b=a
 c=a+b
 print(a)
+print(' flask ')

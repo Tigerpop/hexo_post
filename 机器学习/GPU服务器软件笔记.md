@@ -98,7 +98,11 @@ cat /etc/os-release # 查看版本是不是正确了。
 # 四、查看GPU型号
 
 ```sh
- lspci | grep -i nvidia # 如果只出现了2204 这样的编号没有 出现 像 GTX4090类似这样的具体型号，那就自己去网上搜 编号和具体型号的对应，像2204 对应就是 GTX3090。
+lspci | grep -i nvidia # 如果只出现了2204 这样的编号没有 出现 像 GTX4090类似这样的具体型号，那就自己去网上搜 编号和具体型号的对应，像2204 对应就是 GTX3090。
+
+# 如果是编号 而没有出现 gtx3090等具体型号，先这样拉到的数据库，再运行 lspci | grep -i nvidia
+# sudo wget -O /usr/share/misc/pci.ids https://pci-ids.ucw.cz/v2.2/pci.ids
+# lspci | grep -i nvidia
 ```
 
 也能拆机看看 显卡上有没有贴着，直接明了就是拆机麻烦点。

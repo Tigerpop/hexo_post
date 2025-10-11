@@ -385,6 +385,7 @@ conda list cudatoolkit
 # 进入 自己环境，安装cudnn，根据前面的cudatoolkit的版本，conda search cudnn搜出可用版本来选择。
 conda search cudnn
 conda install cudnn=8.9.2.26 -c https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+# 如果这一步发现没有匹配的cudnn，可以去Nvidia 官网去下载。https://developer.nvidia.com/cudnn
 
 # 进入 自己建立的环境如python3.8，然后（这一步conda可能要等待1-2个小时）。conda、pip安装二选一即可，推荐pip加 -i 清华源，快点。
 # conda install pytorch==2.4.1 torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia

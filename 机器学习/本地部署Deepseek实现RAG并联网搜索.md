@@ -1732,6 +1732,29 @@ nohup vllm serve /model/deepseek-r1-70b-AWQ \
 
 
 
+> 如果换模型为千问，上面一步一步改成这样
+>
+> ```bash
+> # host机器
+> bash run_cluster.sh     vllm/vllm-openai     10.5.9.252     --head     /home/cys/data/models/Qwen2.5-72B-Instruct-AWQ     -v /home/cys/data/models/Qwen2.5-72B-Instruct-AWQ:/model/Qwen2.5-72B-Instruct-AWQ     -e VLLM_HOST_IP=10.5.9.252     -e GLOO_SOCKET_IFNAME=enp1s0     -e NCCL_SOCKET_IFNAME=enp1s0
+> 
+> # 奴隶机器
+> bash run_cluster.sh     vllm/vllm-openai     10.5.9.252     --worker     /home/cys/data/models/Qwen2.5-72B-Instruct-AWQ     -v /home/cys/data/models/Qwen2.5-72B-Instruct-AWQ:/model/Qwen2.5-72B-Instruct-AWQ     -e VLLM_HOST_IP=10.5.9.251     -e GLOO_SOCKET_IFNAME=eno3np0     -e NCCL_SOCKET_IFNAME=eno3np0
+> 
+> 
+> # host机器进入容器
+> nohup vllm serve /model/Qwen2.5-72B-Instruct-AWQ \
+>   --tensor-parallel-size 2 \
+>   --pipeline-parallel-size 2 \
+>   --max-model-len 21104 \
+>   --gpu-memory-utilization 0.8 \
+>   --served-model-name Qwen2.5-72B-Instruct-AWQ \
+>   --api-key 'jisudf*&QW123' \
+>   > ./logs/vllm.log 2>&1 &
+> ```
+
+
+
 ### 1.3、嵌入模型部署
 
 参考： https://blog.csdn.net/make_progress/article/details/146051006

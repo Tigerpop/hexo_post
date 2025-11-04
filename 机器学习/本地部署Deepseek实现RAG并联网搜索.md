@@ -110,6 +110,11 @@ curl -fsSL https://get.docker.com | sudo sh
     sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/docker.list
     sudo apt update
     sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+# 国内可能会遇 【错误 curl: (35) Recv failure: Connection reset by peer】，网络防火墙（GFW）的干扰，就使用国内镜像源安装！
+# 先下载安装脚本 
+# curl -fsSL https://get.docker.com -o get-docker.sh
+# 使用国内镜像源运行脚本。这里以阿里云（Aliyun）镜像为例 
+# sudo sh get-docker.sh --mirror Aliyun
 
 # 配置Docker环境
     # 添加用户到docker组

@@ -377,6 +377,10 @@ conda update conda
 pip uninstall torch torchvision torchaudio
 conda remove pytorch torchvision torchaudio
 
+# 若conda慢，装mamba ，后面的所有命令都用mamba代替conda，其他不变。解决依赖冲突更智能，更快。
+# conda install mamba -c conda-forge
+
+
 # 进入 自己环境，安装cudatoolkit，根据自己的Nvidia驱动支持的最高版本来选择。
 conda install cudatoolkit=11.8 -c https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
 # 检查一下

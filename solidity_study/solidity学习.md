@@ -1,7 +1,7 @@
 ---
 layout: posts
 title: solidity学习
-date: 2025-10-4 10:27:21
+date: 2025-12-4 15:27:21
 description: "这是文章开头，显示在主页面，详情请点击此处。"
 categories: 
 - "区块链"
@@ -13,6 +13,42 @@ tags:
 
 
 solidity文档 `https://learnblockchain.cn/docs/solidity/`
+
+# 前言
+
+## 首先要明确几个概念
+
+1、**mapping 声明**：
+
+mapping 声明后的变量不是方法，而是会实实在在存一些东西的。但是它和指针又有很多不一样。
+
+指针：标识符 = **真实存储的地址**
+
+```c++
+int x = 100;
+int *p = &x;  // p 变量里存着 x 的地址（比如 0x1000）
+printf("%p", p); // 可以打印出 0x1000
+*p = 200;        // CPU 读取 p 的值（0x1000），再去写那个内存
+```
+
+- `p` 是一个**真实存在的变量**，占 8 字节内存
+- 地址 `0x1000` 被**明确记录下来**
+
+mapping：标识符 = **临时计算的输入**
+
+```solidity 
+mapping(address => uint256) balances;
+balances[0xAlice] = 100;
+```
+
+- `0xAlice` **不会被写入 storage**
+- EVM 用它和 slot 计算出一个哈希（如 `0xabc...def`）
+- **只把 `100` 写入 `0xabc...def` 这个槽**
+- 如果你不知道 `0xAlice`，就永远找不到这个 `100`
+
+> 💡 **指针是“存地址”，mapping 是“用 key 算地址”**。
+
+
 
 # 几个实例
 
@@ -659,7 +695,7 @@ contract Purchase {
 
 ------
 
-#### 🔐 “签署内容”到底是什么？
+##### 🔐 “签署内容”到底是什么？
 
 签署的不是“文字”，而是一段数据的哈希。
  但你可以把它理解成是对这句话签名：
@@ -712,7 +748,7 @@ Alice和Bob使用签名来授权交易，这在以太坊的智能合约中是可
 
 #### 创建签名
 
-Alice不需要与以太坊网络交互来签署交易，这个过程是完全离线的。 我们将使用 [web3.js](https://github.com/web3/web3.js) 和 [MetaMask](https://metamask.io/) 在浏览器中签署信息。
+Alice不需要与以太坊网络交互来签署交易，这个过程是完全离线的。 我们将使用 [web3.js](https://github.com/web3/web3.js) 或 [MetaMask](https://metamask.io/) 在浏览器中签署信息。
 
 ```js
 /// 先进行哈希运算使事情变得更容易
@@ -768,29 +804,37 @@ function signPayment(recipient, amount, nonce, contractAddress, callback) {
 
 web3.js 产生的签名是 `r`, `s` 和 `v` 的拼接的， 所以第一步是把这些参数分开。您可以在客户端这样做， 但在智能合约内这样做意味着你只需要发送一个签名参数而不是三个。 将一个字节数组分割成它的组成部分是很麻烦的， 所以我们在 `splitSignature` 函数中使用 [inline assembly](https://docs.soliditylang.org/zh-cn/v0.8.23/assembly.html) 完成这项工作（本节末尾的完整合约中的第三个函数）。
 
-#### 代码
+#### 支付通道
+
+就是前面写的通俗例子的账本，但是这里提示一下，这个账本是单向支付通道；
+
+#### 结算相关代码
 
 ```solidity
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.7.0 <0.9.0;
 // 这将报告一个由于废弃的 selfdestruct 而产生的警告
 contract ReceiverPays {
+    // 这里有一个关键的逻辑一定要搞明白，就是这个合约的所有人，就是出钱建这个合同的人，也就是owner。
+    // 而掉用这个收款合约的人才是收款人，掉用这个合约的一些方法来收款。
+    // 期间的签名sign 都是 onwer 出钱的人来签名，收款人掉用方法，给出出钱人的签名来要钱。
     address owner = msg.sender;
 
     mapping(uint256 => bool) usedNonces;
 
-    constructor() payable {}
+    constructor() payable {}    //{}：空函数体，表示构造函数不执行额外逻辑
 
+    // claim是索要的意思索赔。
     function claimPayment(uint256 amount, uint256 nonce, bytes memory signature) external {
         require(!usedNonces[nonce]);
-        usedNonces[nonce] = true;
+        usedNonces[nonce] = true;   // 标记为已经使用。
 
         // 这将重新创建在客户端上签名的信息。
-        bytes32 message = prefixed(keccak256(abi.encodePacked(msg.sender, amount, nonce, this)));
+        bytes32 message = prefixed(keccak256(abi.encodePacked(msg.sender, amount, nonce, this)));  //打包好，hash计算，加前缀，this- 当前合约地址（防止跨合约重放）
 
         require(recoverSigner(message, signature) == owner);
 
-        payable(msg.sender).transfer(amount);
+        payable(msg.sender).transfer(amount); // 向掉用这个合约方法的人打钱。
     }
 
     /// 销毁合约并收回剩余的资金。
@@ -822,7 +866,7 @@ contract ReceiverPays {
     function recoverSigner(bytes32 message, bytes memory sig)
         internal
         pure
-        returns (address)
+        returns (address)  // 返回这个签名的地址。
     {
         (uint8 v, bytes32 r, bytes32 s) = splitSignature(sig);
 
@@ -835,4 +879,575 @@ contract ReceiverPays {
     }
 }
 ```
+
+#### 支付相关代码
+
+下面是JavaScript代码，用于对上一节中的信息进行加密签名：
+
+每条信息包括以下信息：
+
+> - 智能合约的地址，用于防止跨合约重放攻击。
+> - 到目前为止，欠接收方的以太币的总金额。
+
+```js
+function constructPaymentMessage(contractAddress, amount) {
+    return abi.soliditySHA3(
+        ["address", "uint256"],
+        [contractAddress, amount]
+    );
+}
+
+function signMessage(message, callback) {
+    web3.eth.personal.sign(
+        "0x" + message.toString("hex"),
+        web3.eth.defaultAccount,
+        callback
+    );
+}
+
+// contractAddress， 是用来防止跨合约的重放攻击。
+// amount，单位是wei，指定了应该发送多少以太。
+// 回调函数 `callback` 会在签名操作完成后被调用。回调函数通常有两个参数：
+//     - `error`：如果签名过程中发生错误，`error` 会包含错误信息；如果没有错误，`error` 为 `null`。
+//     - `signature`：生成的签名字符串。如果签名成功，`signature` 会包含签名结果。
+
+function signPayment(contractAddress, amount, callback) {
+    var message = constructPaymentMessage(contractAddress, amount);
+    signMessage(message, callback);
+}
+```
+
+支付相关代码
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.7.0 <0.9.0;
+// 这将报告一个由于废弃的 selfdestruct 而产生的警告
+contract SimplePaymentChannel {
+    address payable public sender;      // 发送付款的账户。
+    address payable public recipient;   // 接收付款的账户。
+    uint256 public expiration;  // 超时时间，以防接收者永不关闭支付通道。
+
+    constructor (address payable recipientAddress, uint256 duration)
+        payable
+    {
+        sender = payable(msg.sender);
+        recipient = recipientAddress;
+        expiration = block.timestamp + duration;
+    }
+
+    /// 接收者可以在任何时候通过提供发送者签名的金额来关闭通道，
+    /// 接收者将获得该金额，其余部分将返回发送者。
+    function close(uint256 amount, bytes memory signature) external {
+        require(msg.sender == recipient);
+        require(isValidSignature(amount, signature));
+
+        recipient.transfer(amount);
+        selfdestruct(sender);
+    }
+
+    /// 发送者可以在任何时候延长到期时间。
+    function extend(uint256 newExpiration) external {
+        require(msg.sender == sender);
+        require(newExpiration > expiration);
+
+        expiration = newExpiration;
+    }
+
+    /// 如果达到超时时间而接收者没有关闭通道，
+    /// 那么以太就会被释放回给发送者。
+    function claimTimeout() external {
+        require(block.timestamp >= expiration);
+        selfdestruct(sender);
+    }
+   function isValidSignature(uint256 amount, bytes memory signature)
+        internal
+        view
+        returns (bool)
+    {
+        // this 关键字指的是当前合约的实例。它通常用于获取合约的地址或调用合约上的函数。
+        // 将合约地址和金额打包成一个字节序列。
+        bytes32 message = prefixed(keccak256(abi.encodePacked(this, amount)));
+
+        // 检查签名是否来自付款方。
+        return recoverSigner(message, signature) == sender;
+    }
+
+    /// 下面的所有功能是取自 '创建和验证签名' 的章节。
+
+    function splitSignature(bytes memory sig)
+        internal
+        pure
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
+        require(sig.length == 65);
+
+        assembly {
+            // 前32个字节，在长度前缀之后。
+            r := mload(add(sig, 32))
+            // 第二个32字节。
+            s := mload(add(sig, 64))
+            // 最后一个字节（下一个32字节的第一个字节）。
+            v := byte(0, mload(add(sig, 96)))
+        }
+
+        return (v, r, s);
+    }
+
+    // 表示该函数不读取或修改合约的状态，只基于输入参数进行计算。
+    function recoverSigner(bytes32 message, bytes memory sig)
+        internal
+        pure
+        returns (address)
+    {
+        (uint8 v, bytes32 r, bytes32 s) = splitSignature(sig);
+
+        // 使用 `ecrecover` 函数从消息哈希 `message` 和签名的三个部分 `v`、`r`、`s` 中恢复签署者的地址。之前利用massage来做的签名中会包含 sender 信息，通过 ecrecover 方法，利用 message 和 签名还原出 sender 的地址；
+        return ecrecover(message, v, r, s);
+    }
+
+    /// 构建一个前缀哈希值，以模仿eth_sign的行为。
+    function prefixed(bytes32 hash) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+    }
+}
+```
+
+#### 验证付款
+
+这是以太坊智能合约和前端交互中常见的签名验证逻辑。
+
+这意味着接收者对每条信息进行自行验证是至关重要的。 否则就不能保证接收者最终能够得到付款。
+
+接收者应使用以下程序验证每条信息：
+
+1. 验证签名信息中的合约地址是否与支付通道相符。
+2. 验证新的总额是否为预期的数额。
+3. 确认新的总额不超过代管的以太币数额。
+4. 验证签名是否有效，是否来自于支付通道的发送方。
+
+```solidity
+// 这模拟了eth_sign 的JSON-RPC构建前缀的方法。
+// 对原始消息哈希 hash 添加以太坊签名标准前缀，并重新哈希。
+// 得到一个 最终被签名的消息哈希，这个才是 ecrecover 能正确恢复公钥所必需的值。
+function prefixed(hash) {
+    return ethereumjs.ABI.soliditySHA3(
+        ["string", "bytes32"],
+        ["\x19Ethereum Signed Message:\n32", hash]
+    );
+}
+
+function recoverSigner(message, signature) {
+    var split = ethereumjs.Util.fromRpcSig(signature);
+    // 根据签名和消息哈希，恢复出公钥（不是私钥！）。
+    var publicKey = ethereumjs.Util.ecrecover(message, split.v, split.r, split.s);
+    // 将公钥（65字节） 转换为以太坊地址：
+    // 对公钥做 Keccak256 哈希
+    // 取最后 20 字节（即地址），.toString("hex") → 转为十六进制字符串
+    var signer = ethereumjs.Util.pubToAddress(publicKey).toString("hex");
+    return signer;
+}
+
+function isValidSignature(contractAddress, amount, signature, expectedSigner) {
+    var message = prefixed(constructPaymentMessage(contractAddress, amount));
+    var signer = recoverSigner(message, signature);
+    return signer.toLowerCase() ==
+        ethereumjs.Util.stripHexPrefix(expectedSigner).toLowerCase();
+}
+```
+
+#### 模块化降低复杂性
+
+> **“用模块化的方法来构建您的合约，可以帮助减少复杂性，提高可读性…”**
+
+- 智能合约一旦部署就难以修改，安全至关重要。
+- 如果把所有逻辑（转账、权限、业务规则等）都写在一个合约里，代码会非常臃肿，逻辑交织，极易出错。
+- **模块化**：将不同功能拆分成独立的单元（比如用 Solidity 的 `library` 或单独的合约），每个单元只负责一个明确的任务。
+
+**关注“模块间交互”，而非“所有函数的任意组合”: **
+
+- 每个模块内部是“封闭”的（比如 `Balances` 库只管理余额）
+- 你只需关注：**模块之间如何调用？传递什么参数？是否满足前置/后置条件？**
+- 不需要担心模块内部的实现细节会意外影响其他部分。
+
+想象你在造一辆车：
+
+- **非模块化**：把引擎、刹车、方向盘全部焊死在一起，改一个零件可能影响所有功能。
+- **模块化**：引擎是一个独立模块，刹车是另一个。你只需确保“引擎输出动力”、“刹车能减速”，它们之间通过标准接口（比如油门踏板）交互。
+  → 即使引擎坏了，也不会导致刹车失灵。
+
+在智能合约中，`Balances` 库就是“刹车系统”——独立、可靠、职责清晰。
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.5.0 <0.9.0;
+
+// 这个库保证了两个关键不变量（Invariants）：
+// 不会出现负余额
+// → 因为 move 中有 require(_balances[from] >= amount)
+// 总余额守恒
+// → 因为 -= amount 和 += amount 是原子操作，总和不变（假设初始总和正确）
+// ✅ 一旦你验证了这个库的逻辑是正确的，在整个项目中都可以安全地使用它，而无需每次转账都重新思考“会不会溢出？会不会负数？”
+library Balances {
+    function move(mapping(address => uint256) storage balances, address from, address to, uint amount) internal {
+        require(balances[from] >= amount);
+        require(balances[to] + amount >= balances[to]);
+        balances[from] -= amount;
+        balances[to] += amount;
+    }
+}
+
+// 这是一个简化版本的 ERC20 代币合约；
+contract Token {
+    // 声明 —— 声明了一种“通过键访问值”的存储模式。注意 mapping 不是一个方法。
+    // solidity中的 mapping声明的这个变量 是“数据”（状态的组织方式），
+    // 而方法（function）是“行为”（对数据的操作逻辑）。
+    mapping(address => uint256) balances;
+    // 方便直接引用Balance库中的方法；
+    using Balances for *;
+    // “两级哈希”，但强调：它是一次性计算，不是分步跳转。
+    // 是一个接受两个键（address, address）的复合映射，其存储位置由这两个键共同哈希决定。
+    // 像两把钥匙 开保险箱；而不是python中函数嵌套的闭包，也不是指针组成的链表；
+    // allowed[所有者][被授权人] = 允许提取的最大代币数量
+    mapping(address => mapping(address => uint256)) allowed;
+
+    event Transfer(address from, address to, uint amount);
+    event Approval(address owner, address spender, uint amount);
+
+    function transfer(address to, uint amount) external returns (bool success) {
+        balances.move(msg.sender, to, amount);
+        emit Transfer(msg.sender, to, amount);
+        return true;
+
+    }
+
+    // 这里是掉用别人授权的支付额度来进行支付； 
+    // 用户可以授权别人代付（approve + transferFrom）
+    // allowed[所有者地址][被授权人地址] = 允许提取的代币数量
+    function transferFrom(address from, address to, uint amount) external returns (bool success) {
+        require(allowed[from][msg.sender] >= amount);    // 在授权额度余额内；
+        allowed[from][msg.sender] -= amount;             // 先改变状态（减少额度），再交互（转账）
+        balances.move(from, to, amount);                 // 交互
+        emit Transfer(from, to, amount);
+        return true;
+    }
+
+    function approve(address spender, uint tokens) external returns (bool success) {
+        require(allowed[msg.sender][spender] == 0, "");  // 只允许在当前授权额度为 0 时设置新额度
+        allowed[msg.sender][spender] = tokens;           // 最多允许spender转走tokens个代币；
+        emit Approval(msg.sender, spender, tokens);
+        return true;
+    }
+
+    function balanceOf(address tokenOwner) external view returns (uint balance) {
+        return balances[tokenOwner];
+    }
+}
+```
+
+
+
+# 安装solidity编译器
+
+推荐直接使用  docker 
+
+```bash
+# 先换源，或者直接指定docker中proxy代理；
+docker pull ethereum/solc:stable
+
+docker run ethereum/solc:stable solc --version
+```
+
+所谓编译，就是把源代码脚本编译成机器能够执行的二进制代码，而 java 、python 之类的语言，是 用一个解释器中转 一下，给java 虚拟机或者python虚拟机使用。
+
+```bash
+docker run -v /path/to/contracts:/sources ethereum/solc:stable solc --bin --abi /sources/MyContract.sol -o /sources/output
+```
+
+> - `-v /path/to/contracts:/sources`：将本地合约目录挂载到容器内的 `/sources` 路径。
+> - `solc --bin --abi ...`：调用 `solc` 编译器，生成字节码（`--bin`）和 ABI（`--abi`）。
+> - `-o /sources/output`：将输出文件写入挂载目录中的 `output` 子目录（需要提前创建或确保路径可写）。
+
+
+
+# 合约结构
+
+## 状态变量
+
+状态变量是指其值被永久地存储在合约存储中的变量。
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.4.0 <0.9.0;
+
+contract SimpleStorage {
+    uint storedData; // 状态变量
+    // ...
+}
+```
+
+## 函数
+
+函数是代码的可执行单位。 通常在合约内定义函数，但它们也可以被定义在合约之外。
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.7.1 <0.9.0;
+
+contract SimpleAuction {
+    function bid() public payable { // 函数
+        // ...
+    }
+}
+
+// 定义在合约之外的辅助函数
+function helper(uint x) pure returns (uint) {
+    return x * 2;
+}
+```
+
+## 修饰器
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.4.22 <0.9.0;
+
+contract Purchase {
+    address public seller;
+
+    modifier onlySeller() { // 修饰器
+        require(
+            msg.sender == seller,
+            "Only seller can call this."
+        );
+        _;
+    }
+
+    function abort() public view onlySeller { // 修饰器的使用
+        // ...
+    }
+}
+```
+
+## 事件
+
+事件是能方便地调用以太坊虚拟机日志功能的接口。
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.22;
+
+event HighestBidIncreased(address bidder, uint amount); // 事件
+
+contract SimpleAuction {
+    function bid() public payable {
+        // ...
+        emit HighestBidIncreased(msg.sender, msg.value); // 触发事件
+    }
+}
+```
+
+**`event` 会消耗 gas**，但**比写入 storage（状态变量）便宜得多**。
+
+## 错误
+
+错误(类型)允许您为失败情况定义描述性的名称和数据。 错误(类型)可以在 回滚声明 中使用。
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.4;
+
+/// 没有足够的资金用于转账。要求 `requested`。
+/// 但只有 `available` 可用。
+error NotEnoughFunds(uint requested, uint available);
+
+contract Token {
+    mapping(address => uint) balances;
+    function transfer(address to, uint amount) public {
+        uint balance = balances[msg.sender];
+        if (balance < amount)
+            revert NotEnoughFunds(amount, balance);
+        balances[msg.sender] -= amount;
+        balances[to] += amount;
+        // ...
+    }
+}
+```
+
+- **用途**：用于**中断交易并回滚状态更改**，同时可以**向调用者传递结构化错误信息**。
+
+- **gas 消耗**：比 `require()` + 字符串更省 gas（推荐用于自定义错误）。
+
+## 结构类型
+
+结构类型是可以将几个变量分组的自定义类型
+
+```solidity 
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.4.0 <0.9.0;
+
+contract Ballot {
+    struct Voter { // 结构
+        uint weight;
+        bool voted;
+        address delegate;
+        uint vote;
+    }
+}
+```
+
+## 枚举类型
+
+枚举可用来创建由一定数量的’常量值’构成的自定义类型
+
+在合约中声明一个枚举变量:
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.4.0 <0.9.0;
+
+contract Purchase {
+    enum State { Created, Locked, Inactive } // 创建一个枚举类型
+    State public currentState; // 声明一个枚举类型的公共状态变量
+}
+```
+
+给枚举赋值: 0 1 2...
+
+```solidity
+constructor() {
+    currentState = State.Created; // 初始化为 Created
+}
+
+function lock() public {
+    require(currentState == State.Created, "Can only lock when created");
+    currentState = State.Locked;
+}
+```
+
+比较枚举值:
+
+```solidity
+if (currentState == State.Locked) {
+    // 执行某些操作
+}
+```
+
+外部调用（如前端）读取:
+
+```solidity
+// 因为 `currentState` 是 `public`，Solidity 会自动生成一个 getter 函数。前端（如 ethers.js）调用时，**返回的是一个数字（0, 1, 2）**：
+
+const state = await purchaseContract.currentState(); // 返回 0、1 或 2
+```
+
+
+
+# 类型
+
+Solidity 是一种静态类型语言，这意味着每个变量（状态变量和局部变量）都需要被指定类型。 Solidity 提供了几种基本类型，可以用来组合出复杂类型。
+
+Solidity中不存在“未定义”或“空”值null的概念， 但新声明的变量总是有一个取决于其类型的 [默认值](https://docs.soliditylang.org/zh-cn/latest/control-structures.html#default-value)。 为了处理任何意外的值，您应该使用 [revert 函数](https://docs.soliditylang.org/zh-cn/latest/control-structures.html#assert-and-require) 来恢复整个事务， 或者返回一个带有第二个 `bool` 值的元组来表示成功。
+
+> **`revert` 会立即终止当前交易，**
+> **回滚所有状态更改（就像什么都没发生），**交易已花的 gas 不退**（但不再继续花）**
+>
+> 并向调用者返回一个错误信息。
+> 这在 **区块链环境** 中非常重要，因为交易要么**完全成功**，要么**完全失败**（原子性）。
+
+```solidity
+// 初始值 对 bool 是 false，对 uint 是 0，对 address 是 address(0)
+mapping(address => uint) public scores;
+
+// 用 revert 中断交易（推荐用于“必须存在”的场景）
+function getScoreStrict(address user) public view returns (uint) {
+    uint s = scores[user];
+    if (s == 0) {
+        revert UserNotFound(user); // 自定义错误，中断调用
+    }
+    return s;
+}
+
+// 返回 (value, success) 元组（推荐用于“可选”场景） 
+function tryGetScore(address user) public view returns (uint score, bool exists) {
+    uint s = scores[user];
+    if (s == 0) {
+        return (0, false); // 明确表示“不存在”
+    }
+    return (s, true);
+}
+// -----------------------  调用  -----------------------
+(uint score, bool ok) = tryGetScore(user);
+if (ok) {
+    // 使用 score
+} else {
+    // 用户不存在，安全处理
+}
+// -----------------------  调用  -----------------------
+
+// 如果你的业务允许 0 积分，那就不能用 0 判断是否存在。可以改用：
+// 这样即使积分是 0，也知道用户是真实存在的。
+mapping(address => uint) public scores;
+mapping(address => bool) public isRegistered; // 显式标记是否注册
+function getScoreSafe(address user) public view returns (uint, bool) {
+    if (!isRegistered[user]) {
+        return (0, false);
+    }
+    return (scores[user], true);
+}
+```
+
+## 类型值
+
+### bool 类型： 
+
+注意也会有【**短路求值（Short-Circuit Evaluation）**】
+
+```solidity
+a && b // ：如果 a 为 false，不计算 b（因为结果已经是 false）；
+a || b //：如果 a 为 true，不计算 b（因为结果已经是 true）。
+```
+
+### 整型：
+
+`int` / `uint`: 分别表示有符号和无符号【**只有 0 和正数**】的不同位数的整型变量。 关键字 `uint8` 到 `uint256` （无符号整型，从 8 位到 256 位）以及 `int8` 到 `int256`， 以 8 位为步长递增。 `uint` 和 `int` 分别是 `uint256` 和 `int256` 的别名。
+
+因为 1 字节 = 8 位，EVM 基于字节对齐，整数类型的位数只能是：8, 16, 24, 32, ..., 256（每次 +8），例如，对于 `uint32`，这是 `0` 到 `2**32 - 1`；对于 `int32`，这是 `-2**31` 到 `2**31 - 1`。
+
+> 有两种模式在这些类型上进行算术。“包装” 或 “不检查” 模式和 “检查” 模式。 默认情况下，算术总是 “检查” 模式的，uint32为例，这意味着如果一个操作的结果超出了该类型的值范围【2**32 - 1】， 调用将通过一个 [失败的断言](https://docs.soliditylang.org/zh-cn/latest/control-structures.html#assert-and-require) 而被恢复。 您可以用 `unchecked { ... }` 来转换到“未检查”模式。
+
+| `type(int8).min`   | `int8` 的最小值 = **-128**       |
+| ------------------ | -------------------------------- |
+| `type(int8).max`   | `int8` 的最大值 = **127**        |
+| `type(int256).min` | `int256` 的最小值 = **-2²⁵⁵**    |
+| `type(int256).max` | `int256` 的最大值 = **2²⁵⁵ - 1** |
+
+```solidity
+int8 x = type(int8).min; // x = -128
+int8 y = -x;             // 想得到 +128，但 int8 最大只能存 127！
+
+// 因为：
+// ------------ 在 unchecked 中： ------------
+int8 x = type(int8).min; // x = -128 (0b1000_0000)
+-x                       // 二进制取反+1 → 还是 0b1000_0000 → 仍然是 -128！
+// ------------ 在 unchecked 中： ------------
+// 所以：
+unchecked {
+    assert(-x == x); // ✅ 成立！因为 -(-128) 在 8 位下还是 -128
+}
+int8 y = 5;  // 这是十进制 5
+```
+
+
+
+
+
+### 位运算
+
+位操作是在数字的二进制补码表示上进行的。 这意味着，例如 `~int256(0) == int256(-1)`。
+
+### 移位运算
+
+- `x << y` 等同于数学表达式 `x * 2**y`。
+- `x >> y` 等同于数学表达式 `x / 2**y`，向负无穷远的方向取整。
 

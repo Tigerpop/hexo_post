@@ -630,6 +630,20 @@ jupyter kernelspec uninstall python3.7
 jupyter kernelspec list 
 ```
 
+重启其中一个容器服务：
+
+```bash
+docker compose stop user3
+
+# 改 environment 变量后(比如改登录密码)，必须 recreate 容器才会生效,仅 restart 不够;
+
+# -d	后台运行
+# --no-deps	不动其他 service
+# --force-recreate	即使没变化也重建
+# user3	只针对 user3
+docker compose up -d --no-deps --force-recreate user3
+```
+
 
 
 # 传输文件

@@ -2047,6 +2047,8 @@ contract Oracle {
 
     function reply(uint requestID, uint response) public {
         // 这里要检查的是调用返回是否来自可信的来源
+        //如果不加检查，任何外部账户或合约都可以调用 reply 函数，伪造 response，从而欺骗你的合约。 
+         require(msg.sender == trustedResponder, "Unauthorized caller");
         requests[requestID].callback(response);
     }
 }
@@ -2116,4 +2118,93 @@ api.call({ callback: this.handleResponse }); // ← 必须用 this 指明是这�
 // 而不是
 api.call({ callback: handleResponse }); // ← 这只是一个函数，没有绑定上下文
 ```
+
+#### 引用类型
+
+引用类型必须标明存储位置（memory/storage/calldata），而值类型不需要。
+
+在 Solidity 中，**引用类型**（reference types）是指那些**不直接存储值，而是存储指向值的“引用”**（类似指针）的数据类型。主要包括：
+
+- `struct`（结构体）
+- `array`（数组）
+- `mapping`（映射）
+- `bytes/string` 是 （动态字节数组）
+
+它们与 **值类型**（如 `uint`, `bool`, `address`）不同：
+
+值类型在赋值时**总是复制一份新数据**，而引用类型在赋值时**可能共享同一份数据**（取决于存储位置）。
+
+```solidity
+function foo(string memory name) public { ... }        // ✅ 引用类型，必须写 memory
+function bar(Person memory p) public { ... }          // ✅ struct 是引用类型
+function baz(uint[] memory arr) public { ... }        // ✅ 数组是引用类型
+function foo(uint x, address owner) public { ... } // ✅ 不需要 memory
+```
+
+```solidity
+// 上面例子中，因为形参中传入的是 函数，而函数类型在作为参数时，其“值”就是合约地址和函数选择器的组合，类似于 address 类型，而不是值类型的指针，因此不需要也不支持存储位置修饰符。 
+function query(bytes memory data, function(uint) external callback) public 
+```
+
+#### 数据类型
+
+因为 Solidity 是为区块链设计的语言，**资源（尤其是 gas）非常宝贵**，所以它要求你**显式说明引用类型的数据存放在哪里**，以便编译器知道如何处理：
+
+| 存储位置   | 作用                                     | 生命周期             | 是否可修改   |
+| ---------- | ---------------------------------------- | -------------------- | ------------ |
+| `storage`  | 合约的永久状态变量                       | 合约整个生命周期     | 可修改       |
+| `memory`   | 临时内存，用于函数内部                   | 一次外部函数调用期间 | 可修改       |
+| `calldata` | 函数入参的只读区域（比 memory 更省 gas） | 一次外部函数调用期间 | **不可修改** |
+
+```solidity
+contract Example {
+    string name; // storage
+
+    // ❌ 错误：引用类型参数没有指定位置
+    // function bad(string s) public { }
+
+    // ✅ 正确：指定 memory
+    function good(string memory s) public {
+        name = s; // 从 memory 复制到 storage
+    }
+
+    // ✅ 外部函数可用 calldata（只读，更省 gas）
+    function externalGood(string callopen name) external {
+        // 不能修改 name，但可读
+        bytes memory b = bytes(name); // 如果要操作，需复制到 memory
+    }
+}
+
+contract C {
+    // x 的数据存储位置是 storage。
+    // 这是唯一可以省略数据位置的地方。
+    uint[] x;
+
+    // memoryArray 的数据存储位置是 memory。
+    function f(uint[] memory memoryArray) public {
+        x = memoryArray; // 将整个数组拷贝到 storage 中，可行
+        uint[] storage y = x; // 分配一个指针，其中 y 的数据存储位置是 storage，可行
+        y[7]; // 返回第 8 个元素，可行
+        y.pop(); // 通过y修改x，可行
+        delete x; // 清除数组，同时修改 y，可行
+        // 下面的就不可行了；需要在 storage 中创建新的未命名的临时数组，/
+        // 但 storage 是“静态”分配的：
+        // y = memoryArray;
+        // 同样， "delete y" 也是无效的，
+        // 因为对引用存储对象的局部变量的赋值只能从现有的存储对象中进行。
+        // 它将 “重置” 指针，但没有任何合理的位置可以指向它。
+        // 更多细节见 "delete" 操作符的文档。
+        // delete y;
+        g(x); // 调用 g 函数，同时移交对 x 的引用
+        h(x); // 调用 h 函数，同时在 memory 中创建一个独立的临时拷贝
+    }
+
+    function g(uint[] storage) internal pure {}
+    function h(uint[] memory) public pure {}
+}
+```
+
+
+
+
 

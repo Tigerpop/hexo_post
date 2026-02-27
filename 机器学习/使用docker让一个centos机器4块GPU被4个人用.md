@@ -1,7 +1,7 @@
 ---
 layout: posts
 title: 使用docker让一个centos机器4块GPU被4个人用
-date: 2025-12-2 09:13:22
+date: 2026-2-27 09:13:22
 description: "这是文章开头，显示在主页面，详情请点击此处。"
 categories: 
 - "机器学习"
@@ -320,7 +320,9 @@ nvcc test_vector.cu -o test_vector && ./test_vector"
 
 # **构建镜像**
 
-以下操作都在 宿主机的 /data/gpu-lab/ 文件夹下进行。
+以下操作都在 宿主机的 /data/docker/gpu-lab/ 文件夹下进行；
+
+至于这个文件夹在哪里没有大关系，我仅仅是因为14T的硬盘被挂载在 /data/docker，空间比价大，所以gpu-lab这个文件夹丢在这里。
 
 ## 创建启动脚本 `startJupyter.sh`
 
@@ -350,6 +352,85 @@ exec jupyter lab \
     --NotebookApp.token='' \
     --NotebookApp.password="$PASSWORD_HASH"
 ```
+
+以上的基础写法可以，但是会遇到一个问题，那就是每次  docker compose up -d 执行过后，配置好的容器中的 conda环境变成 初始状态。如果是给学生使用，会反复配置conda 环境。
+
+> 这是因为 【容器分层存储机制】
+>
+> ┌─────────────────────────────────┐
+> │  Docker 镜像 (my-gpu-lab:v1)     │ ← 只读层（初始 conda 环境）
+> ├─────────────────────────────────┤
+> │  容器可写层 (writable layer)     │ ← 你手动 conda install 的位置
+> │  • 新安装的包存在这里            │
+> │  • 容器删除/重建 → 这层消失！    │
+> ├─────────────────────────────────┤
+> │  挂载卷 (volumes)               │ ← 唯一持久化区域
+> │  • /data/gpu-lab/user1:/workspace │ ✅ 你已挂载
+> │  • /opt/conda/envs ❌ 未挂载     │ ← 问题根源！
+> └─────────────────────────────────┘
+>
+> 为什么第二次 `docker compose up -d` 会丢失环境？
+>
+> 
+>
+> | 操作                     | 是否重建容器 | 可写层是否保留 | Conda 环境状态 |
+> | ------------------------ | ------------ | -------------- | -------------- |
+> | 首次 `up -d`             | 创建新容器   | ✅ 新建         | 镜像初始状态   |
+> | 手动 `conda install`     | -            | ✅ 写入可写层   | ✅ 临时生效     |
+> | 再次 `up -d`（无变化）   | ❌ 复用容器   | ✅ 保留         | ✅ 还在         |
+> | `up -d --force-recreate` | ✅ 重建容器   | ❌ **删除重建** | ❌ **变回镜像** |
+> | 镜像更新/重新 build      | ✅ 重建容器   | ❌ 删除重建     | ❌ 变回新镜像   |
+>
+> > 💡 **关键结论**：只要容器重建，**所有未挂载目录的修改都会丢失**。
+
+所以我们改进一下，考虑到后面的Dockerfile中我们会在容器的/workspace/做持久化，我们把conda 的相关文件夹在/workspace/也做上持久化；
+
+```bash
+#!/bin/bash
+
+# --- � 新增：Conda 持久化配置开始 ---
+# 1. 指定 conda 配置文件存放在 /workspace (已挂载，持久化)
+export CONDARC=/workspace/.condarc
+
+# 2. 创建环境存储目录和包缓存目录
+mkdir -p /workspace/conda_envs
+mkdir -p /workspace/.conda_pkgs
+
+# 3. 配置 conda 将新环境安装到 /workspace/conda_envs
+#    --system 或默认写入 CONDARC 指向的文件
+conda config --append envs_dirs /workspace/conda_envs
+conda config --append pkgs_dirs /workspace/.conda_pkgs
+
+# 4. (可选) 关闭 anaconda 自动激活 base 环境，避免冲突
+conda config --set auto_activate_base false
+# --- � 新增：Conda 持久化配置结束 ---
+
+
+# 检查是否设置了 USER_PASSWORD 环境变量
+if [ -z "$USER_PASSWORD" ]; then
+    echo "Error: USER_PASSWORD environment variable is not set."
+    exit 1
+fi
+
+# 使用 Python 计算密码的 Hash 值
+# 注意：Pytorch 镜像通常包含 jupyter_server 或 notebook 库
+PASSWORD_HASH=$(python -c "from jupyter_server.auth import passwd; print(passwd('$USER_PASSWORD'))")
+
+echo "Starting Jupyter Lab with user-defined password..."
+
+# 启动 Jupyter Lab
+# --NotebookApp.password: 使用哈希后的密码
+# --NotebookApp.token='': 禁用 token，只准用密码登录
+exec jupyter lab \
+    --ip=0.0.0.0 \
+    --port=8888 \
+    --no-browser \
+    --allow-root \
+    --NotebookApp.token='' \
+    --NotebookApp.password="$PASSWORD_HASH"
+```
+
+这样，用户配置好的 conda 环境就能在 `docker compose up -d`之后也保留原来的环境。
 
 ## 编辑 Dockerfile
 
@@ -500,7 +581,7 @@ services:
     ports:
       - "8881:8888"
     volumes:
-      - /data/gpu-lab/user1:/workspace
+      - /data/docker/gpu-lab/user1:/workspace
     environment:
       - USER_PASSWORD=User1_Is_The_Best   # <--- 在这里设置 User 1 的明文密码
     shm_size: "8gb"
@@ -522,7 +603,7 @@ services:
     ports:
       - "8882:8888"
     volumes:
-      - /data/gpu-lab/user2:/workspace
+      - /data/docker/gpu-lab/user2:/workspace
     environment:
       - USER_PASSWORD=User2_Is_The_Best   # <--- 在这里设置 User 2 的明文密码
     shm_size: "8gb"
@@ -544,7 +625,7 @@ services:
     ports:
       - "8883:8888"
     volumes:
-      - /data/gpu-lab/user3:/workspace
+      - /data/docker/gpu-lab/user3:/workspace
     environment:
       - USER_PASSWORD=User3_Is_The_Best   # <--- 在这里设置 User 3 的明文密码
     shm_size: "8gb"
@@ -566,7 +647,7 @@ services:
     ports:
       - "8884:8888"
     volumes:
-      - /data/gpu-lab/user4:/workspace
+      - /data/docker/gpu-lab/user4:/workspace
     environment:
       - USER_PASSWORD=User4_Is_The_Best   # <--- 在这里设置 User 4 的明文密码
     shm_size: "8gb"
@@ -658,15 +739,67 @@ docker compose up -d --no-deps --force-recreate user3
 
 
 
+# 单独修改某一个容器的配置
+
+## 案例一：
+
+**问题：**
+
+【 我之前的第一版构建镜像的脚本中写的比较草率，导致了docker compose up -d之后，用户在容器中辛辛苦苦建好的conda 环境会被初始化。其中只有user1 这个容器是可以修改的，user234 容器都是正在运行计算，不方便停和改动。】
+
+**解决方法：**
+
+1. （核心改动）
+
+   我在 `startJupyter.sh` 脚本中修改了内容，做好了conda相关文件的持久化；
+
+2. 重建镜像、修改yaml文件并重启容器;
+
+```bash
+# 1. 重新构建镜像 (版本升级为 v2，方便回滚)
+docker build -t my-gpu-lab:v2 .
+
+# 2. 更新 docker-compose.yml 中的镜像版本
+# 将 需要修改的那个容器的 image: my-gpu-lab:v1  改为  image: my-gpu-lab:v2，例如我只修改 user1 就把它对应的镜像改一下就好了。user234不用动它们继续用v1版本的镜像；
+services:
+  user1:
+    image: my-gpu-lab:v2
+
+
+# 3. 重启容器 (其他用户不受影响，只重启 user1)
+docker compose up -d --force-recreate user1
+```
+
+3、（可选）
+
+如果 user1 里已有重要环境，需要把它们“搬”到新目录，否则重启后旧环境会消失。
+
+```bash
+# 1. 进入正在运行的旧容器
+docker exec -it lab-user1 bash
+
+# 2. 在容器内执行迁移脚本
+# 由于我在前面配置了每个容器/workspace/位置的持久化，所以我们需要将 /opt/conda/envs 下的所有环境复制到 /workspace/conda_envs
+cp -r /opt/conda/envs/* /workspace/conda_envs/
+
+# 3. 确保权限正确 (防止 conda 报错)
+chmod -R 755 /workspace/conda_envs
+
+# 4. 退出容器
+exit
+
+# 5. 现在可以安全重启容器了
+docker compose up -d --force-recreate user1
+```
+
+4、验证，user1容器进入它，搞一个新的环境，然后 重新在物理机执行 `docker compose up -d` ，在进入 user1 容器看看有没有保留这个新环境；
 
 
 
-
-
-
-
-
-
+这样做的好处：
+✅ 无需大修 docker-compose.yml（不用动挂载配置，避免权限坑）。
+✅ 数据绝对安全（/workspace 本来就会持久化）。
+✅ 用户无感知（conda activate 环境名 依然可用）
 
 
 

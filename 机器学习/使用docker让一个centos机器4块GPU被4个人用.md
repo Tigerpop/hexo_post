@@ -739,9 +739,9 @@ docker compose up -d --no-deps --force-recreate user3
 
 
 
-# 单独修改某一个容器的配置
+# 补充
 
-## 案例一：
+## 案例一：单独修改某一个容器的配置
 
 **问题：**
 
@@ -803,3 +803,12 @@ docker compose up -d --force-recreate user1
 
 
 
+## 案例二：user1 容器遇到问题想重启
+
+直接在user1 对应的 jupyter 网页端IP:8881进 terminal,然后 `kill 1`，一会儿就会断开连接 重启user1 这个容器（因为容器配置里面写了 `restart：always`。），对于user234 不会有影响。
+
+
+
+## 案例三：容器 jupyter 网页端进 terminal后方向键出现 `[[A`
+
+这是因为用了sh，不是bash ，直接输入一下 `bash` 就可以翻阅历史输入了。

@@ -812,3 +812,27 @@ docker compose up -d --force-recreate user1
 ## 案例三：容器 jupyter 网页端进 terminal后方向键出现 `[[A`
 
 这是因为用了sh，不是bash ，直接输入一下 `bash` 就可以翻阅历史输入了。
+
+
+
+## 案例四：意外掉电导致 `nvidia-smi` 只能识别4个GPU中的 GPU 0
+
+这是由于意外掉电，**NVIDIA 驱动内部的 Resource Manager (RM) 初始化失败**。
+
+ `lspci | grep -i nvidia`  可见四个GPU，但是 `nvidia-smi` 只可见一个 GPU被成功加载。
+
+解决办法：
+
+禁用 PCIe ASPM 电源管理（T4 最高频解法）。
+
+```bash
+sudo vi /etc/default/grub
+
+# 末尾追加 pcie_aspm=off
+
+# 更新 GRUB 并重启：
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg   # CentOS/RHEL
+# sudo update-grub                            # Ubuntu/Debian
+sudo reboot
+```
+

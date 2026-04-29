@@ -805,7 +805,204 @@ docker compose up -d --force-recreate user1
 
 ## 案例二：user1 容器遇到问题想重启
 
+方法一：
+简易做法不一定有用：
+
 直接在user1 对应的 jupyter 网页端IP:8881进 terminal,然后 `kill 1`，一会儿就会断开连接 重启user1 这个容器（因为容器配置里面写了 `restart：always`。），对于user234 不会有影响。
+
+
+
+方法二（推荐）：
+
+思路：
+
+在宿主机运行一个程序，等待容器发来请求，收到容器的重启请求，就触发重启容器的命令。（但是要做好ip控制和token控制）
+
+宿主机（控制层）：
+
+```bash
+# 先确认 宿主、容器 ip 段
+ip route
+# --------------------- IP ---------------------
+default via 172.26.1.254 dev eno3
+169.254.0.0/16 dev eno3 scope link metric 1004
+169.254.0.0/16 dev ib0 scope link metric 1006
+172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1
+172.19.0.0/16 dev br-79071969c333 proto kernel scope link src 172.19.0.1
+172.26.1.0/24 dev eno3 proto kernel scope link src 172.26.1.20
+172.26.2.0/24 dev ib0 proto kernel scope link src 172.26.2.20
+# --------------------- IP ---------------------
+# 容器通过 172.17.0.1 访问宿主机； 宿主机对外部网络是172.26.1.20；容器之间都是在 172.19.XXX.XXX 这个内部网段中，也就是说容器访问宿主机，宿主机看见的容器就处在 172.19.XXX.XXX 这个内部网段中。
+```
+
+```bash
+# 安装依赖；
+python3 -m pip install --upgrade pip setuptools wheel
+
+pip3 install fastapi uvicorn -i  https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 创建目录 方便程序运行；
+mkdir -p /data/docker/gpu-lab/reboot_container_control
+
+cd /data/docker/gpu-lab/reboot_container_control
+
+vim app.py
+```
+
+```python
+
+from fastapi import FastAPI, Request, HTTPException
+from datetime import datetime
+import os
+
+app = FastAPI()
+
+# ===== 是否启用本机访问限制 =====
+LOCAL_ONLY = True   # ← 开关（只需要改这里）
+
+# ===== Token映射 =====
+# 每个容器有对应的token，防止相互之间重启搞破坏
+TOKENS = {
+    "token_user1_abc": "lab-user1",
+    "token_user2_def": "lab-user2",
+    "token_user3_xyz": "lab-user3",
+    "token_user4_ooo": "lab-user4",
+}
+
+# ===== 白名单 IP（本机） ip route 确认过容器网段了 =====
+ALLOWED_PREFIX = ("127.0.0.1", "172.19.", "172.17.")
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+
+    # ===== 可选：限制只能白名单 IP访问 =====
+    if LOCAL_ONLY:
+        client_ip = request.client.host
+        if not client_ip.startswith(ALLOWED_PREFIX):
+            raise HTTPException(403, "Not allowed remote accesse,need 白名单 IP")
+
+    return await call_next(request)
+
+
+@app.post("/restart")
+def restart(request: Request):
+
+    # ===== Token认证 =====
+    token = request.headers.get("X-TOKEN")
+
+    if token not in TOKENS:
+        raise HTTPException(403, "invalid token")
+
+    container = TOKENS[token]
+
+    # 反查用户名称（可选）
+    user_name = container.replace("lab-", "")
+    
+    # 写日志到 mylog.log
+    print("准备重启:", container)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{now} {user_name} restarted {container}", flush=True) # 防止 print 缓冲，日志立刻写入文件。
+    os.system(f"docker restart {container}")
+    print("重启完成:", container, flush=True)
+
+    return {"ok": True, "container": container,"msg": "环境重启成功，请等待10秒"}
+```
+
+后台启动服务
+
+```bash
+# 后台启动服务，日志留在当前文件夹下，方便排查；
+nohup python3 -m  uvicorn app:app --host 0.0.0.0 --port 5000 > mylog.log 2>&1 &
+
+# 或者还想看到访问记录
+nohup python3 -m uvicorn app:app \
+--host 0.0.0.0 \
+--port 5000 \
+--access-log > mylog.log 2>&1 &
+
+# 看看后台进程
+ps -ef | grep uvicorn
+
+# 检查日志
+cat mylog.log
+# ----------------- mylog.log -----------------
+nohup: ignoring input
+INFO:     Started server process [17818]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)
+# ----------------- mylog.log -----------------
+```
+
+
+
+容器内（web客户端）
+
+这里以 user3号容器为例, 只需要把对应的在 `app.py` 中的 `token` 改一下就好了；
+
+```bash
+# 如果在容器里执行：
+curl -X POST http://172.17.0.1:5000/restart \
+-H "X-TOKEN:token_user3_xyz"
+
+# 会看到：
+# {"ok":true,"container":"lab-user3"}
+```
+
+先新建一个`restart.sh` 脚本，以 user3号容器为例，每个容器有对应的token，防止相互之间重启搞破坏；
+
+```bash
+#!/bin/bash
+curl -X POST http://172.17.0.1:5000/restart -H "X-TOKEN:token_user3_xyz"
+```
+
+通过 post 请求访问宿主机的/restart 触发宿主机执行容器重启命令；
+
+每次在 web端jupyter 中 执行 `bash restart.sh` 就可以让容器重启了；
+
+```bash
+# 宿主机内检查是否重启容器成功，重启速度可能非常快，就1秒钟又恢复了，让人感觉没有重启一样；
+docker ps
+# ----------------- 看容器 status 那一列 -----------------
+CONTAINER ID   IMAGE           COMMAND                  CREATED        STATUS         PORTS                                       NAMES
+3af65113c465   my-gpu-lab:v2   "/opt/nvidia/nvidia_…"   5 hours ago    Up 9 seconds   0.0.0.0:8883->8888/tcp, :::8883->8888/tcp   lab-user3
+de2b6055f761   my-gpu-lab:v2   "/opt/nvidia/nvidia_…"   5 weeks ago    Up 9 days      0.0.0.0:8881->8888/tcp, :::8881->8888/tcp   lab-user1
+e4e10cd74e69   my-gpu-lab:v2   "/opt/nvidia/nvidia_…"   2 months ago   Up 9 days      0.0.0.0:8882->8888/tcp, :::8882->8888/tcp   lab-user2
+b4ae6f978862   my-gpu-lab:v1   "/opt/nvidia/nvidia_…"   2 months ago   Up 9 days      0.0.0.0:8884->8888/tcp, :::8884->8888/tcp   lab-user4
+# ----------------- 看容器 status 那一列 -----------------
+
+# 看日志文件
+cat mylog.log
+# ---------------- mylog.log -----------------
+nohup: ignoring input
+INFO:     Started server process [23399]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)
+准备重启: lab-user3
+2026-04-29 16:49:31 user3 restarted lab-user3
+lab-user3
+重启完成: lab-user3
+# ---------------- mylog.log -----------------
+```
+
+user1 2 4 参考
+
+```bash
+#!/bin/bash
+curl -X POST http://172.17.0.1:5000/restart -H "X-TOKEN:token_user1_abc"
+```
+
+```bash
+#!/bin/bash
+curl -X POST http://172.17.0.1:5000/restart -H "X-TOKEN:token_user2_def"
+```
+
+```bash
+#!/bin/bash
+curl -X POST http://172.17.0.1:5000/restart -H "X-TOKEN:token_user4_ooo"
+```
 
 
 

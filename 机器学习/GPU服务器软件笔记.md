@@ -377,6 +377,10 @@ conda update conda
 pip uninstall torch torchvision torchaudio
 conda remove pytorch torchvision torchaudio
 
+# 若conda慢，装mamba ，后面的所有命令都用mamba代替conda，其他不变。解决依赖冲突更智能，更快。
+# conda install mamba -c conda-forge
+
+
 # 进入 自己环境，安装cudatoolkit，根据自己的Nvidia驱动支持的最高版本来选择。
 conda install cudatoolkit=11.8 -c https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
 # 检查一下
@@ -415,7 +419,16 @@ jupyter kernelspec uninstall python3.7
 jupyter kernelspec list 
 ```
 
-
+> 对于 vGPU 的虚拟化用Nvidia授权的，4个`Tesla V100S-PCIE-32GB` 分出8个用户我们那批老机器，我经过尝试可以用如下的
+>
+> ```bash
+> # 选这组 torch 组合
+> pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113 -i https://pypi.tuna.tsinghua.edu.cn/simple
+> 
+> # 换老版本 numbly
+> pip uninstall numpy
+> pip install "numpy==1.24.3" --force-reinstall
+> ```
 
 
 

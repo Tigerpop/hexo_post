@@ -19,14 +19,15 @@ tags:
 2、 使用annie 中，如果是要下载 原画质的视频，可能需要一个  网页插件 “editthiscookie”，然后用annie的命令使用即可。
 
 ```python
-annie -i # 查看 
-annie -f # 选择视频清晰度
-annie -p # 连续下载，像下载 20集连续剧，-p后 接第一集的链接即可自动连下。
-annie -c "cookie内容" # 用cookie保证下载的视频清晰度。记得加引号。
+annie -i "链接" # 查看 
+annie -f "链接" # 选择视频清晰度
+annie -p "链接" # 连续下载，像下载 20集连续剧，-p后 接第一集的链接即可自动连下。
+annie -c "cookie内容" "链接" # 用cookie保证下载的视频清晰度。记得加引号。
 
 ```
 
-**editthiscookie**查看cookie 
+补充查看 cookie方法：
+一、**editthiscookie**查看cookie 
 
 ```python
 用chroma浏览器中的此插件，导出此页面的cookie，有效的 部分就是 _uuid 到最后的部分。
@@ -38,3 +39,14 @@ annie -c "cookie内容" # 用cookie保证下载的视频清晰度。记得加引
 _uuid=FBE35628-AE7E...............hdslb.com;
 ```
 
+二、直接F12 网页查看cookie（更推荐）
+
+按F12，打开调试检查页面；
+
+点击network网络；
+
+搜索 aut；
+
+刷新一下页面；
+
+在 Headers 请求头中 找到 Cookie 对应的部分。

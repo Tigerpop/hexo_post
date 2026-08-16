@@ -1,6 +1,6 @@
 ---
 layout: posts
-title: annie教程
+title: annie/lux教程
 date: 2023-11-22 15:20:14
 description: "这是文章开头，显示在主页面，详情请点击此处。"
 categories: 
@@ -9,6 +9,8 @@ tags:
 - "下载"
 - "annie"
 ---
+
+老Annie 改名 叫 Lux 了，下面的Annie 都可以改成 lux 继续用。
 
 1、先下载 annie （可能需要下载 一个配套的 合成视频的工具），macbook 中可能需要更新brew 或者 自带的 Xcode。
 

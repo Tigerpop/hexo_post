@@ -2204,7 +2204,29 @@ contract C {
 }
 ```
 
+##### 数组
 
+一个元素类型为 `T`，固定长度为 `k` 的数组可以声明为 `T[k]`， 而动态数组声明为 `T[]`。
+
+一个由5个 `uint` 的动态数组组成的数组被写成 `uint[][5]`。 与其他一些语言相比, 这种记法是相反的。 在Solidity中, `X[3]` 总是一个包含三个 `X` 类型元素的数组， 即使 `X` 本身是一个数组。 这在其他语言中是不存在的，如C语言。
+
+`bytes` 和 `string` 类型的变量是特殊的数组。 `bytes` 类似于 `bytes1[]`， 但它在 calldata 中会被“紧打包”，可以使用 `string.concat` 连接任意数量的 `string` 值。 该函数返回一个单一的 `string memory` 数组，同样， `bytes.concat` 函数可以连接任意数量的 `bytes` 或 `bytes1 ... bytes32` 值。 该函数返回一个单一的 `bytes memory` 数组。
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.12;
+
+contract C {
+    string s = "Storage";
+    function f(bytes calldata bc, string memory sm, bytes16 b) public view {
+        string memory concatString = string.concat(s, string(bc), "Literal", sm);
+        assert((bytes(s).length + bc.length + 7 + bytes(sm).length) == bytes(concatString).length);
+
+        bytes memory concatBytes = bytes.concat(bytes(s), bc, bc[:2], "Literal", bytes(sm), b);
+        assert((bytes(s).length + bc.length + 2 + 7 + bytes(sm).length + b.length) == concatBytes.length);
+    }
+}
+```
 
 
 
